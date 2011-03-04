@@ -1,0 +1,1 @@
+mvn exec:java -e -Dexec.mainClass=edu.stanford.mobisocial.bumblebee.Main
