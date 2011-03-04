@@ -12,7 +12,7 @@ public class Main {
 			});
 		m.addStateListener(new MessageListener(){
 				public void onMessage(IncomingMessage m){
-					System.out.println("READY!");
+					System.out.println("Got message! " + m.toString());
 				}
 			});
 		m.init();
