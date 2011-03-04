@@ -6,12 +6,12 @@ import org.jivesoftware.smack.filter.PacketFilter;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class XMPPMessengerService extends MessengerService{
-
+public class XMPPMessengerService extends MessengerService {
 	private XMPPConnection connection = null;
 	private String username = null;
 	private String password = null;
 	private LinkedBlockingQueue<OutgoingMessage> sendQ = new LinkedBlockingQueue<OutgoingMessage>();
+	public static final String XMPP_SERVER = "prpl.stanford.edu";
 
 	private Thread sendWorker = new Thread(){
 			@Override
@@ -24,9 +24,11 @@ public class XMPPMessengerService extends MessengerService{
 							sendQ.poll();
 							String plain = m.contents();
 							String cypher = identity().encrypt(plain);
-							Message msg = new Message(cypher);
-							msg.setFrom(username);
-							msg.setTo(publicKeyToUsername(m.toPublicKey()));
+							Message msg = new Message();
+							msg.setFrom(username + "@" + XMPP_SERVER);
+							msg.setBody(cypher);
+							String jid = publicKeyToUsername(m.toPublicKey()) + "@" + XMPP_SERVER;
+							msg.setTo(jid);
 							connection.sendPacket(msg);
 						}
 						else{
@@ -62,13 +64,14 @@ public class XMPPMessengerService extends MessengerService{
 		if(username == null || password == null){
 			throw new IllegalArgumentException("Must supply username and password.");
 		}
+		System.out.println("Logging in with " + username + " " + password);
 		try{
-			connection = new XMPPConnection("sb.openjunction.org");
+			connection = new XMPPConnection(XMPP_SERVER);
 			connection.connect();
 			AccountManager mgr = connection.getAccountManager();
 			Map<String,String> atts = new HashMap<String,String>();
 			atts.put("name", "AnonUser");
-			atts.put("email", "AnonUser@prpl.stanford.edu");
+			atts.put("email", "AnonUser@" + XMPP_SERVER);
 			try{
 				connection.login(username, password);
 				System.out.println("Logged in!");
@@ -103,9 +106,27 @@ public class XMPPMessengerService extends MessengerService{
 
 	private void handleLoggedIn(){
 		assertConnected();
+		connection.addConnectionListener(new ConnectionListener(){
+				public void connectionClosed(){
+					System.out.println("Connection closed");
+				}
+				public void connectionClosedOnError(Exception e){
+					System.out.println("Connection closed on error: " + e);
+				}
+				public void reconnectingIn(int i){
+					System.out.println("Reconnecting in: " + i);
+				}
+				public void reconnectionFailed(Exception e){
+					System.out.println("Reconnection failed: " + e);
+				}
+				public void reconnectionSuccessful(){
+					System.out.println("Reconnection successful");
+				}
+			});
 		connection.addPacketListener(new PacketListener(){
 				public void processPacket(final Packet p){
 					if(p instanceof Message){
+						System.out.println("Processing " + p);
 						final Message m = (Message)p;
 						signalMessageReceived(new IncomingMessage(){
 								public String from(){

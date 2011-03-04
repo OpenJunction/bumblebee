@@ -1,1 +1,1 @@
-mvn exec:java -e -Dexec.mainClass=edu.stanford.mobisocial.bumblebee.Main
+mvn exec:java -e -Dexec.mainClass=edu.stanford.mobisocial.bumblebee.Main -Dexec.args="${1} ${2}" 

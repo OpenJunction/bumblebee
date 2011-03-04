@@ -23,7 +23,7 @@ public abstract class MessengerService {
 	public void addStateListener(StateListener l){
 		stateListeners.add(l);
 	}
-	public void addStateListener(MessageListener l){
+	public void addMessageListener(MessageListener l){
 		messageListeners.add(l);
 	}
 	public void removeStateListener(StateListener l){
