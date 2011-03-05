@@ -17,41 +17,41 @@ public class XMPPMessengerService extends MessengerService {
 	private LinkedBlockingQueue<OutgoingMessage> sendQ = new LinkedBlockingQueue<OutgoingMessage>();
 	public static final String XMPP_SERVER = "prpl.stanford.edu";
 	private Thread sendWorker = new Thread() {
-		@Override
-		public void run() {
-			while (true) {
-				try {
-					OutgoingMessage m = sendQ.peek();
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        OutgoingMessage m = sendQ.peek();
 
-					if ((m != null) && connected()) {
-						System.out
+                        if ((m != null) && connected()) {
+                            System.out
 								.println("Pulled message off sendQueue. Sending.");
-						sendQ.poll();
+                            sendQ.poll();
 
-						String plain = m.contents();
+                            String plain = m.contents();
 
-						try {
-							String cypher = identity().prepareOutgoingMessage(
+                            try {
+                                String cypher = identity().prepareOutgoingMessage(
 									plain, m.toPublicKey());
-							Message msg = new Message();
-							msg.setFrom(username + "@" + XMPP_SERVER);
-							msg.setBody(cypher);
+                                Message msg = new Message();
+                                msg.setFrom(username + "@" + XMPP_SERVER);
+                                msg.setBody(cypher);
 
-							String jid = publicKeyToUsername(m.toPublicKey())
+                                String jid = publicKeyToUsername(m.toPublicKey())
 									+ "@" + XMPP_SERVER;
-							msg.setTo(jid);
-							connection.sendPacket(msg);
-						} catch (CryptoException e) {
-							e.printStackTrace(System.err);
-						}
-					} else {
-						Thread.sleep(1000);
-					}
-				} catch (InterruptedException e) {
-				}
-			}
-		}
-	};
+                                msg.setTo(jid);
+                                connection.sendPacket(msg);
+                            } catch (CryptoException e) {
+                                e.printStackTrace(System.err);
+                            }
+                        } else {
+                            Thread.sleep(1000);
+                        }
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+        };
 
 	public XMPPMessengerService(Identity ident) {
 		super(ident);
@@ -67,7 +67,7 @@ public class XMPPMessengerService extends MessengerService {
 			me = Util.SHA1(pkey.getEncoded());
 		} catch (Exception e) {
 			throw new IllegalArgumentException(
-					"Could not compute SHA1 of public key.");
+                "Could not compute SHA1 of public key.");
 		}
 
 		return me.substring(0, 10);
@@ -77,7 +77,7 @@ public class XMPPMessengerService extends MessengerService {
 	public void init() {
 		if ((username == null) || (password == null)) {
 			throw new IllegalArgumentException(
-					"Must supply username and password.");
+                "Must supply username and password.");
 		}
 
 		System.out.println("Logging in with " + username + " " + password);
@@ -98,7 +98,7 @@ public class XMPPMessengerService extends MessengerService {
 			} catch (XMPPException e) {
 				try {
 					System.out
-							.println("Login failed. Attempting to create account..");
+                        .println("Login failed. Attempting to create account..");
 					mgr.createAccount(username, password, atts);
 
 					try {
@@ -130,67 +130,72 @@ public class XMPPMessengerService extends MessengerService {
 	private void handleLoggedIn() {
 		assertConnected();
 		connection.addConnectionListener(new ConnectionListener() {
-			public void connectionClosed() {
-				System.out.println("Connection closed");
-			}
+                public void connectionClosed() {
+                    System.out.println("Connection closed");
+                }
 
-			public void connectionClosedOnError(Exception e) {
-				System.out.println("Connection closed on error: " + e);
-			}
+                public void connectionClosedOnError(Exception e) {
+                    System.out.println("Connection closed on error: " + e);
+                }
 
-			public void reconnectingIn(int i) {
-				System.out.println("Reconnecting in: " + i);
-			}
+                public void reconnectingIn(int i) {
+                    System.out.println("Reconnecting in: " + i);
+                }
 
-			public void reconnectionFailed(Exception e) {
-				System.out.println("Reconnection failed: " + e);
-			}
+                public void reconnectionFailed(Exception e) {
+                    System.out.println("Reconnection failed: " + e);
+                }
 
-			public void reconnectionSuccessful() {
-				System.out.println("Reconnection successful");
-			}
-		});
+                public void reconnectionSuccessful() {
+                    System.out.println("Reconnection successful");
+                }
+            });
 		connection.addPacketListener(new PacketListener() {
-			public void processPacket(final Packet p) {
-				if (p instanceof Message) {
-					System.out.println("Processing " + p);
+                public void processPacket(final Packet p) {
+                    if (p instanceof Message) {
+                        System.out.println("Processing " + p);
 
-					final Message m = (Message) p;
-					final String body = m.getBody();
-					PublicKey pkey = identity().getMessagePublicKey(body);
+                        final Message m = (Message) p;
+                        final String body = m.getBody();
+                        PublicKey pkey = identity().getMessagePublicKey(body);
 
-					if (!(m.getFrom().startsWith(publicKeyToUsername(pkey)))) {
-						System.err
+                        if (!(m.getFrom().startsWith(publicKeyToUsername(pkey)))) {
+                            System.err
 								.println("WTF! public key in message does not match sender!.");
 
-						return;
-					}
+                            return;
+                        }
 
-					final String contents = identity().prepareIncomingMessage(
-							body, pkey);
+                        try{
+                            final String contents = identity().prepareIncomingMessage(
+                                body, pkey);
+                            signalMessageReceived(new IncomingMessage() {
+                                    public String from() {
+                                        return m.getFrom();
+                                    }
 
-					signalMessageReceived(new IncomingMessage() {
-						public String from() {
-							return m.getFrom();
-						}
+                                    public String contents() {
+                                        return contents;
+                                    }
 
-						public String contents() {
-							return contents;
-						}
-
-						public String toString() {
-							return contents();
-						}
-					});
-				} else {
-					System.out.println("Unrecognized packet " + p.toString());
-				}
-			}
-		}, new PacketFilter() {
-			public boolean accept(Packet p) {
-				return true;
-			}
-		});
+                                    public String toString() {
+                                        return contents();
+                                    }
+                                });
+                        }
+                        catch(CryptoException e){
+                            System.err.println("Failed in processing incoming message! Reason:");
+                            e.printStackTrace(System.err);
+                        }
+                    } else {
+                        System.out.println("Unrecognized packet " + p.toString());
+                    }
+                }
+            }, new PacketFilter() {
+                    public boolean accept(Packet p) {
+                        return true;
+                    }
+                });
 		signalReady();
 	}
 

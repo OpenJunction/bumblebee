@@ -7,7 +7,7 @@ public interface Identity {
 
 	public PublicKey getMessagePublicKey(String s);
 
-	public String prepareIncomingMessage(String s, PublicKey sender);
+	public String prepareIncomingMessage(String s, PublicKey sender) throws CryptoException;
 
 	public String prepareOutgoingMessage(String s, PublicKey receiver)
 			throws CryptoException;

@@ -42,7 +42,7 @@ public class StandardIdentity implements Identity {
 		}
 	}
 
-	public String prepareIncomingMessage(String s, PublicKey sender) {
+	public String prepareIncomingMessage(String s, PublicKey sender) throws CryptoException{
 		try {
 			String[] parts = s.split(",");
 			String aesKeyS = parts[1];
@@ -92,8 +92,7 @@ public class StandardIdentity implements Identity {
 
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
-
-			return null;
+			throw new CryptoException();
 		}
 	}
 
