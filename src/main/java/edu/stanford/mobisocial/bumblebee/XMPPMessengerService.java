@@ -4,6 +4,7 @@ import org.jivesoftware.smack.*;
 import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
+import edu.stanford.mobisocial.bumblebee.util.*;
 
 import java.security.PublicKey;
 import java.util.*;
