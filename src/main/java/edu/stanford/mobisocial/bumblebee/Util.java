@@ -21,12 +21,12 @@ public class Util {
         return buf.toString();
     } 
 
-	public static String SHA1(String text) 
+	public static String SHA1(byte[] input) 
 		throws NoSuchAlgorithmException, UnsupportedEncodingException  { 
 		MessageDigest md;
 		md = MessageDigest.getInstance("SHA-1");
 		byte[] sha1hash = new byte[40];
-		md.update(text.getBytes("iso-8859-1"), 0, text.length());
+		md.update(input, 0, input.length);
 		sha1hash = md.digest();
 		return convertToHex(sha1hash);
     } 

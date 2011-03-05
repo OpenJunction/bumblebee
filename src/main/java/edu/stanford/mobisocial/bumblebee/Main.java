@@ -1,16 +1,54 @@
 package edu.stanford.mobisocial.bumblebee;
 import java.io.*;
+import java.security.*;
+import java.security.cert.Certificate;
 
 public class Main {
 
-    public static void main( String[] args ){
+	private static KeyPair loadKeyPair(String file){
+		try{
+			KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+			// get user password and file input stream
+			char[] password = {};
+			FileInputStream fis = new FileInputStream(file);
+			ks.load(fis, password);
+			fis.close();
+			try {
+				String alias = "privateKeyAlias";
+				// Get private key
+				Key key = ks.getKey("privateKeyAlias", password);
+				if (key instanceof PrivateKey) {
+					// Get certificate of public key
+					Certificate cert = ks.getCertificate(alias);
+					// Get public key
+					PublicKey publicKey = cert.getPublicKey();
+					// Return a key pair
+					return new KeyPair(publicKey, (PrivateKey)key);
+				}
+			} catch (UnrecoverableKeyException e) {
+			} catch (NoSuchAlgorithmException e) {
+			} catch (KeyStoreException e) {
+			}
+			return null;
+		}
+		catch(Exception e){
+			return null;
+		}
+		
+	}
+
+	public static void main( String[] args ){
+
 		if(args.length < 1){
-			System.out.println("Usage: PROGRAM myPublicKey toPublicKey");
+			System.out.println("Usage: PROGRAM mykeyfile otherkeyfile");
 			System.exit(0);
 		}
-		final String pubKey = args[0];
-		final String toPubKey = args[1];
-		MessengerService m = new XMPPMessengerService(new StandardIdentity(pubKey));
+
+		final KeyPair mykeys = loadKeyPair(args[0]);
+		final KeyPair otherkeys = loadKeyPair(args[1]);
+
+		MessengerService m = new XMPPMessengerService(
+			new StandardIdentity(mykeys.getPublic(), mykeys.getPrivate()));
 		m.addStateListener(new StateListener(){
 				public void onReady(){
 					System.out.println("READY!");
@@ -22,6 +60,7 @@ public class Main {
 					System.out.println("Got message! " + m.toString());
 				}
 			});
+
 		m.init();
 
 		try{
@@ -33,7 +72,7 @@ public class Main {
 				final String line = curLine;
 				if (!(curLine.equals("q"))){
 					m.sendMessage(new OutgoingMessage(){
-							public String toPublicKey(){ return toPubKey; }
+							public PublicKey toPublicKey(){ return otherkeys.getPublic(); }
 							public String contents(){ return line; }
 						});
 					System.out.println("You typed: " + curLine);

@@ -1,6 +1,7 @@
 package edu.stanford.mobisocial.bumblebee;
+import java.security.PublicKey;
 
 public interface OutgoingMessage {
-	public String toPublicKey();
+	public PublicKey toPublicKey();
 	public String contents();
 }

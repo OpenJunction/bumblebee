@@ -3,6 +3,7 @@ import org.jivesoftware.smack.*;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.filter.PacketFilter;
+import java.security.PublicKey;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -23,13 +24,18 @@ public class XMPPMessengerService extends MessengerService {
 							System.out.println("Pulled message off sendQueue. Sending.");
 							sendQ.poll();
 							String plain = m.contents();
-							String cypher = identity().encrypt(plain);
-							Message msg = new Message();
-							msg.setFrom(username + "@" + XMPP_SERVER);
-							msg.setBody(cypher);
-							String jid = publicKeyToUsername(m.toPublicKey()) + "@" + XMPP_SERVER;
-							msg.setTo(jid);
-							connection.sendPacket(msg);
+							try{
+								String cypher = identity().prepareMessage(plain, m.toPublicKey());
+								Message msg = new Message();
+								msg.setFrom(username + "@" + XMPP_SERVER);
+								msg.setBody(cypher);
+								String jid = publicKeyToUsername(m.toPublicKey()) + "@" + XMPP_SERVER;
+								msg.setTo(jid);
+								connection.sendPacket(msg);
+							}
+							catch(EncryptionFailedException e){
+								e.printStackTrace(System.err);
+							}
 						}
 						else{
 							Thread.sleep(1000);
@@ -47,10 +53,10 @@ public class XMPPMessengerService extends MessengerService {
 		sendWorker.start();
 	}
 
-	private String publicKeyToUsername(String pkey){
+	private String publicKeyToUsername(PublicKey pkey){
 		String me = null;
 		try{
-			me = Util.SHA1(pkey);
+			me = Util.SHA1(pkey.getEncoded());
 		}
 		catch(Exception e){
 			throw new IllegalArgumentException("Could not compute SHA1 of public key.");
