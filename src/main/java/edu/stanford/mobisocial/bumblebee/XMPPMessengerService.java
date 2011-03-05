@@ -99,7 +99,12 @@ public class XMPPMessengerService extends MessengerService {
 					System.out
 							.println("Login failed. Attempting to create account..");
 					mgr.createAccount(username, password, atts);
-                    try{Thread.sleep(100);}catch(InterruptedException ex){}
+
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException ex) {
+					}
+
 					System.out.println("Account created, logging in...");
 
 					try {
@@ -150,13 +155,18 @@ public class XMPPMessengerService extends MessengerService {
 					System.out.println("Processing " + p);
 
 					final Message m = (Message) p;
-                    final String body = m.getBody();
-                    PublicKey pkey = identity().getMessagePublicKey(body);
-                    if(!(m.getFrom().startsWith(publicKeyToUsername(pkey)))){
-                        System.err.println("WTF! public key in message does not match sender!.");
-                        return;
-                    }
-                    final String contents = identity().prepareIncomingMessage(body, pkey);
+					final String body = m.getBody();
+					PublicKey pkey = identity().getMessagePublicKey(body);
+
+					if (!(m.getFrom().startsWith(publicKeyToUsername(pkey)))) {
+						System.err
+								.println("WTF! public key in message does not match sender!.");
+
+						return;
+					}
+
+					final String contents = identity().prepareIncomingMessage(
+							body, pkey);
 
 					signalMessageReceived(new IncomingMessage() {
 						public String from() {
