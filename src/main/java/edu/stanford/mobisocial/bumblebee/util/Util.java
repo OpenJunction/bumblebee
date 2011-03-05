@@ -1,10 +1,22 @@
 package edu.stanford.mobisocial.bumblebee.util;
 
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class Util {
+
+    /**
+	 * Copies a stream.
+	 */
+	public static void copy(InputStream is, OutputStream os) throws IOException {
+		int i;
+		byte[] b = new byte[1024];
+		while((i=is.read(b))!=-1) {
+			os.write(b, 0, i);
+		}
+	}
+
 	private static String convertToHex(byte[] data) {
 		StringBuffer buf = new StringBuffer();
 
@@ -27,7 +39,7 @@ public class Util {
 	}
 
 	public static String SHA1(byte[] input) throws NoSuchAlgorithmException,
-			UnsupportedEncodingException {
+                                                   UnsupportedEncodingException {
 		MessageDigest md;
 		md = MessageDigest.getInstance("SHA-1");
 
