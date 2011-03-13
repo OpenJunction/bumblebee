@@ -88,14 +88,14 @@ public class XMPPMessengerService extends MessengerService {
 					System.out
                         .println("Login failed. Attempting to create account..");
 					mgr.createAccount(mUsername, mPassword, atts);
-
-					try {
-						Thread.sleep(100);
-					} catch (InterruptedException ex) {
-					}
-
 					System.out.println("Account created, logging in...");
 
+                    // for some disconnect this always prints a stacktrace..
+                    System.err.println("Following exception is expected:");
+                    mConnection.disconnect();
+
+                    mConnection = new XMPPConnection(XMPP_SERVER);
+                    mConnection.connect();
 					try {
 						mConnection.login(mUsername, mPassword);
 						System.out.println("Logged in!");
