@@ -5,14 +5,14 @@ import java.util.*;
 public abstract class MessengerService {
 	private Set<StateListener> stateListeners = new HashSet<StateListener>();
 	private Set<MessageListener> messageListeners = new HashSet<MessageListener>();
-	private Identity ident;
+	private TransportIdentityProvider mIdent;
 
-	public MessengerService(Identity ident) {
-		this.ident = ident;
+	public MessengerService(TransportIdentityProvider ident) {
+		this.mIdent = ident;
 	}
 
-	protected Identity identity() {
-		return ident;
+	protected TransportIdentityProvider identity() {
+		return mIdent;
 	}
 
 	public abstract void init();
