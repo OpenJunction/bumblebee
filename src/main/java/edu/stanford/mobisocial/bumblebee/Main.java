@@ -78,6 +78,8 @@ public class Main {
 		final PublicKey otherPubKey = loadPublicKey("etc/" + otherKeyPrefix
                                                     + "_public_key.der");
 
+        System.out.println(Base64.encodeToString(myPubKey.getEncoded(), false));
+
         TransportIdentityProvider ident = new TransportIdentityProvider(){
                 public PublicKey userPublicKey() { return myPubKey; }
                 public PrivateKey userPrivateKey(){ return myPrivKey; }
