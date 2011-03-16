@@ -22,7 +22,6 @@ public class XMPPMessengerService extends MessengerService {
                 while (true) {
                     try {
                         OutgoingMessage m = mSendQ.peek();
-
                         if ((m != null) && connected()) {
                             System.out
 								.println("Pulled message off sendQueue. Sending.");
@@ -144,9 +143,11 @@ public class XMPPMessengerService extends MessengerService {
                         System.out.println("Processing " + p);
                         final Message m = (Message) p;
                         final String body = m.getBody();
+                        final String jid = m.getFrom();
+
 
                         String id = mFormat.getMessagePersonId(body);
-                        if (!(m.getFrom().startsWith(id))) {
+                        if (!(jid.startsWith(id))) {
                             System.err.println("WTF! person id in message does not match sender!.");
                             return;
                         }
@@ -158,18 +159,13 @@ public class XMPPMessengerService extends MessengerService {
 
                         try{
                             final String contents = mFormat.prepareIncomingMessage(body, pubKey);
-                            signalMessageReceived(new IncomingMessage() {
-                                    public String from() {
-                                        return m.getFrom();
-                                    }
-
-                                    public String contents() {
-                                        return contents;
-                                    }
-
-                                    public String toString() {
-                                        return contents();
-                                    }
+                            int i = jid.indexOf("@");
+                            final String from = i > -1 ? jid.substring(0, i) : jid;
+                            signalMessageReceived(
+                                new IncomingMessage() {
+                                    public String from() { return from; }
+                                    public String contents() { return contents; }
+                                    public String toString() { return contents(); }
                                 });
                         }
                         catch(CryptoException e){
