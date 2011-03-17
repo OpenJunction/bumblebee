@@ -65,12 +65,19 @@ public class XMPPMessengerService extends MessengerService {
         mFormat = new XMPPMessageFormat(ident);
 	}
 
-
     synchronized private void reconnect(){
 		if ((mUsername == null) || (mPassword == null)) {
 			throw new IllegalArgumentException(
                 "Must supply username and password.");
 		}
+
+        try{
+            if(mConnection != null){
+                mConnection.disconnect();
+            }
+        }
+        catch(Exception e){
+        }
 
 		System.out.println("Logging in with " + mUsername + " " + mPassword);
 
