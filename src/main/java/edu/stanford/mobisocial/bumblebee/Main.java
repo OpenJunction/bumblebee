@@ -97,7 +97,10 @@ public class Main {
                     return makePersonIdForPublicKey(key);
                 }
             };
-        MessengerService m = new XMPPMessengerService(ident);
+        ConnectionStatus status = new ConnectionStatus(){
+                public boolean isConnected(){ return true; }
+            };
+        MessengerService m = new XMPPMessengerService(ident, status);
 		m.addStateListener(new StateListener() {
                 public void onReady() {
                     System.out.println("READY!");

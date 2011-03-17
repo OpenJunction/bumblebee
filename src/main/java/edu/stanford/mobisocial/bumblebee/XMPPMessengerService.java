@@ -22,7 +22,7 @@ public class XMPPMessengerService extends MessengerService {
                 while (true) {
                     try {
                         OutgoingMessage m = mSendQ.peek();
-                        if ((m != null) && connected()) {
+                        if (connectedToInternet() && (m != null) && connected()) {
                             System.out
 								.println("Pulled message off sendQueue. Sending.");
                             mSendQ.poll();
@@ -43,7 +43,12 @@ public class XMPPMessengerService extends MessengerService {
                             } catch (CryptoException e) {
                                 e.printStackTrace(System.err);
                             }
-                        } else {
+                        } 
+                        else {
+                            if(connectedToInternet() && !connected()){
+                                System.out.println("Oops! Not connected. Trying to connect....");
+                                reconnect();
+                            }
                             Thread.sleep(1000);
                         }
                     } catch (InterruptedException e) {
@@ -52,16 +57,16 @@ public class XMPPMessengerService extends MessengerService {
             }
         };
 
-	public XMPPMessengerService(TransportIdentityProvider ident) {
-		super(ident);
+	public XMPPMessengerService(TransportIdentityProvider ident, ConnectionStatus status) {
+		super(ident, status);
 		mUsername = ident.userPersonId();
 		mPassword = mUsername + "pass";
 		sendWorker.start();
         mFormat = new XMPPMessageFormat(ident);
 	}
 
-	@Override
-	public void init() {
+
+    synchronized private void reconnect(){
 		if ((mUsername == null) || (mPassword == null)) {
 			throw new IllegalArgumentException(
                 "Must supply username and password.");
@@ -112,6 +117,12 @@ public class XMPPMessengerService extends MessengerService {
 			Throwable ex = e.getWrappedThrowable();
 			ex.printStackTrace(System.err);
 		}
+    }
+
+	@Override
+	synchronized public void init() {
+        if(!sendWorker.isAlive())
+            sendWorker.start();
 	}
 
 	private void handleLoggedIn() {
@@ -186,6 +197,10 @@ public class XMPPMessengerService extends MessengerService {
 
 	private boolean connected() {
 		return (mConnection != null) && mConnection.isConnected();
+	}
+
+	private boolean connectedToInternet() {
+		return connectionStatus().isConnected();
 	}
 
 	private void assertConnected() {
