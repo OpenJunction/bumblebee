@@ -83,34 +83,33 @@ public class XMPPMessengerService extends MessengerService {
 
 		try {
 			mConnection = new XMPPConnection(XMPP_SERVER);
+            addHandlers(mConnection);
 			mConnection.connect();
 
 			AccountManager mgr = mConnection.getAccountManager();
 			Map<String, String> atts = new HashMap<String, String>();
 			atts.put("name", "AnonUser");
 			atts.put("email", "AnonUser@" + XMPP_SERVER);
-
 			try {
 				mConnection.login(mUsername, mPassword);
 				System.out.println("Logged in!");
-				handleLoggedIn();
+				signalReady();
 			} catch (XMPPException e) {
 				try {
 					System.out
                         .println("Login failed. Attempting to create account..");
 					mgr.createAccount(mUsername, mPassword, atts);
 					System.out.println("Account created, logging in...");
-
-                    // for some disconnect this always prints a stacktrace..
-                    System.err.println("Following exception is expected:");
+                    removeHandlers(mConnection);
                     mConnection.disconnect();
 
                     mConnection = new XMPPConnection(XMPP_SERVER);
+                    addHandlers(mConnection);
                     mConnection.connect();
 					try {
 						mConnection.login(mUsername, mPassword);
 						System.out.println("Logged in!");
-						handleLoggedIn();
+                        signalReady();
 					} catch (XMPPException ex) {
 						System.err.println("Login failed.");
 						System.err.println(ex);
@@ -132,74 +131,81 @@ public class XMPPMessengerService extends MessengerService {
             sendWorker.start();
 	}
 
-	private void handleLoggedIn() {
-		assertConnected();
-		mConnection.addConnectionListener(new ConnectionListener() {
-                public void connectionClosed() {
-                    System.out.println("Connection closed");
-                }
+    private ConnectionListener mConnListener = new ConnectionListener() {
+            public void connectionClosed() {
+                System.out.println("Connection closed");
+            }
 
-                public void connectionClosedOnError(Exception e) {
-                    System.out.println("Connection closed on error: " + e);
-                }
+            public void connectionClosedOnError(Exception e) {
+                System.out.println("Connection closed on error: " + e);
+            }
 
-                public void reconnectingIn(int i) {
-                    System.out.println("Reconnecting in: " + i);
-                }
+            public void reconnectingIn(int i) {
+                System.out.println("Reconnecting in: " + i);
+            }
 
-                public void reconnectionFailed(Exception e) {
-                    System.out.println("Reconnection failed: " + e);
-                }
+            public void reconnectionFailed(Exception e) {
+                System.out.println("Reconnection failed: " + e);
+            }
 
-                public void reconnectionSuccessful() {
-                    System.out.println("Reconnection successful");
+            public void reconnectionSuccessful() {
+                System.out.println("Reconnection successful");
+            }
+        };
+
+    private PacketListener mPacketListener = new PacketListener() {
+            public void processPacket(final Packet p) {
+                if (p instanceof Message) {
+                    System.out.println("Processing " + p);
+                    final Message m = (Message) p;
+                    final String body = m.getBody();
+                    final String jid = m.getFrom();
+
+
+                    String id = mFormat.getMessagePersonId(body);
+                    if (!(jid.startsWith(id))) {
+                        System.err.println("WTF! person id in message does not match sender!.");
+                        return;
+                    }
+                    PublicKey pubKey = identity().publicKeyForPersonId(id);
+                    if (pubKey == null) {
+                        System.err.println("WTF! message from unrecognized sender! " + id);
+                        return;
+                    }
+
+                    try{
+                        final String contents = mFormat.prepareIncomingMessage(body, pubKey);
+                        int i = jid.indexOf("@");
+                        final String from = i > -1 ? jid.substring(0, i) : jid;
+                        signalMessageReceived(
+                            new IncomingMessage() {
+                                public String from() { return from; }
+                                public String contents() { return contents; }
+                                public String toString() { return contents(); }
+                            });
+                    }
+                    catch(CryptoException e){
+                        System.err.println("Failed in processing incoming message! Reason:");
+                        e.printStackTrace(System.err);
+                    }
+                } else {
+                    System.out.println("Unrecognized packet " + p.toString());
+                }
+            }
+        };
+
+	private void addHandlers(XMPPConnection conn) {
+		conn.addConnectionListener(mConnListener);
+		conn.addPacketListener(mPacketListener,new PacketFilter() {
+                public boolean accept(Packet p) {
+                    return true;
                 }
             });
-		mConnection.addPacketListener(new PacketListener() {
-                public void processPacket(final Packet p) {
-                    if (p instanceof Message) {
-                        System.out.println("Processing " + p);
-                        final Message m = (Message) p;
-                        final String body = m.getBody();
-                        final String jid = m.getFrom();
+	}
 
-
-                        String id = mFormat.getMessagePersonId(body);
-                        if (!(jid.startsWith(id))) {
-                            System.err.println("WTF! person id in message does not match sender!.");
-                            return;
-                        }
-                        PublicKey pubKey = identity().publicKeyForPersonId(id);
-                        if (pubKey == null) {
-                            System.err.println("WTF! message from unrecognized sender! " + id);
-                            return;
-                        }
-
-                        try{
-                            final String contents = mFormat.prepareIncomingMessage(body, pubKey);
-                            int i = jid.indexOf("@");
-                            final String from = i > -1 ? jid.substring(0, i) : jid;
-                            signalMessageReceived(
-                                new IncomingMessage() {
-                                    public String from() { return from; }
-                                    public String contents() { return contents; }
-                                    public String toString() { return contents(); }
-                                });
-                        }
-                        catch(CryptoException e){
-                            System.err.println("Failed in processing incoming message! Reason:");
-                            e.printStackTrace(System.err);
-                        }
-                    } else {
-                        System.out.println("Unrecognized packet " + p.toString());
-                    }
-                }
-            }, new PacketFilter() {
-                    public boolean accept(Packet p) {
-                        return true;
-                    }
-                });
-		signalReady();
+	private void removeHandlers(XMPPConnection conn) {
+		conn.removeConnectionListener(mConnListener);
+		conn.removePacketListener(mPacketListener);
 	}
 
 	private boolean connected() {
