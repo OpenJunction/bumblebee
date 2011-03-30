@@ -1,4 +1,5 @@
 package edu.stanford.mobisocial.bumblebee;
+import org.jivesoftware.smack.filter.PacketTypeFilter;
 import org.jivesoftware.smack.*;
 import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.packet.Message;
@@ -79,18 +80,18 @@ public class XMPPMessengerService extends MessengerService {
         catch(Exception e){
         }
 
-		System.out.println("Logging in with " + mUsername + " " + mPassword);
-
 		try {
 			mConnection = new XMPPConnection(XMPP_SERVER);
-            addHandlers(mConnection);
+            System.out.println("Connecting...");
 			mConnection.connect();
+            addHandlers(mConnection);
 
 			AccountManager mgr = mConnection.getAccountManager();
 			Map<String, String> atts = new HashMap<String, String>();
 			atts.put("name", "AnonUser");
 			atts.put("email", "AnonUser@" + XMPP_SERVER);
 			try {
+                System.out.println("Logging in with " + mUsername + " " + mPassword);
 				mConnection.login(mUsername, mPassword);
 				System.out.println("Logged in!");
 				signalReady();
@@ -104,8 +105,8 @@ public class XMPPMessengerService extends MessengerService {
                     mConnection.disconnect();
 
                     mConnection = new XMPPConnection(XMPP_SERVER);
-                    addHandlers(mConnection);
                     mConnection.connect();
+                    addHandlers(mConnection);
 					try {
 						mConnection.login(mUsername, mPassword);
 						System.out.println("Logged in!");
@@ -196,11 +197,7 @@ public class XMPPMessengerService extends MessengerService {
 
 	private void addHandlers(XMPPConnection conn) {
 		conn.addConnectionListener(mConnListener);
-		conn.addPacketListener(mPacketListener,new PacketFilter() {
-                public boolean accept(Packet p) {
-                    return true;
-                }
-            });
+		conn.addPacketListener(mPacketListener, new PacketTypeFilter(Message.class));
 	}
 
 	private void removeHandlers(XMPPConnection conn) {
