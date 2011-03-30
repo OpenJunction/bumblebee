@@ -156,41 +156,37 @@ public class XMPPMessengerService extends MessengerService {
 
     private PacketListener mPacketListener = new PacketListener() {
             public void processPacket(final Packet p) {
-                if (p instanceof Message) {
-                    System.out.println("Processing " + p);
-                    final Message m = (Message) p;
-                    final String body = m.getBody();
-                    final String jid = m.getFrom();
+                System.out.println("Processing " + p);
+                final Message m = (Message) p;
+                final String body = m.getBody();
+                final String jid = m.getFrom();
 
 
-                    String id = mFormat.getMessagePersonId(body);
-                    if (!(jid.startsWith(id))) {
-                        System.err.println("WTF! person id in message does not match sender!.");
-                        return;
-                    }
-                    PublicKey pubKey = identity().publicKeyForPersonId(id);
-                    if (pubKey == null) {
-                        System.err.println("WTF! message from unrecognized sender! " + id);
-                        return;
-                    }
+                String id = mFormat.getMessagePersonId(body);
+                if (!(jid.startsWith(id))) {
+                    System.err.println("WTF! person id in message does not match sender!.");
+                    return;
+                }
+                PublicKey pubKey = identity().publicKeyForPersonId(id);
+                if (pubKey == null) {
+                    System.err.println("WTF! message from unrecognized sender! " + id);
+                    return;
+                }
 
-                    try{
-                        final String contents = mFormat.prepareIncomingMessage(body, pubKey);
-                        int i = jid.indexOf("@");
-                        final String from = i > -1 ? jid.substring(0, i) : jid;
-                        signalMessageReceived(
-                            new IncomingMessage() {
-                                public String from() { return from; }
-                                public String contents() { return contents; }
-                                public String toString() { return contents(); }
-                            });
-                    }
-                    catch(CryptoException e){
-                        System.err.println("Failed in processing incoming message! Reason:");
-                        e.printStackTrace(System.err);
-                    }
-                } else {
-                    System.out.println("Unrecognized packet " + p.toString());
+                try{
+                    final String contents = mFormat.prepareIncomingMessage(body, pubKey);
+                    int i = jid.indexOf("@");
+                    final String from = i > -1 ? jid.substring(0, i) : jid;
+                    signalMessageReceived(
+                        new IncomingMessage() {
+                            public String from() { return from; }
+                            public String contents() { return contents; }
+                            public String toString() { return contents(); }
+                        });
+                }
+                catch(CryptoException e){
+                    System.err.println("Failed in processing incoming message! Reason:");
+                    e.printStackTrace(System.err);
                 }
             }
         };
