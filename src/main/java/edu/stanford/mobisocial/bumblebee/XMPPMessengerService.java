@@ -27,20 +27,19 @@ public class XMPPMessengerService extends MessengerService {
                             System.out
 								.println("Pulled message off sendQueue. Sending.");
                             mSendQ.poll();
-
                             String plain = m.contents();
-
                             try {
-                                String cypher = mFormat.prepareOutgoingMessage(
-									plain, m.toPublicKey());
-                                Message msg = new Message();
-                                msg.setFrom(mUsername + "@" + XMPP_SERVER);
-                                msg.setBody(cypher);
-
-                                String jid = identity().personIdForPublicKey(m.toPublicKey())
-									+ "@" + XMPP_SERVER;
-                                msg.setTo(jid);
-                                mConnection.sendPacket(msg);
+                                for(PublicKey pubKey : m.toPublicKeys()){
+                                    String cypher = mFormat.prepareOutgoingMessage(
+                                        plain, pubKey);
+                                    Message msg = new Message();
+                                    msg.setFrom(mUsername + "@" + XMPP_SERVER);
+                                    msg.setBody(cypher);
+                                    String jid = identity().personIdForPublicKey(
+                                        pubKey) + "@" + XMPP_SERVER;
+                                    msg.setTo(jid);
+                                    mConnection.sendPacket(msg);
+                                }
                             } catch (CryptoException e) {
                                 e.printStackTrace(System.err);
                             }
