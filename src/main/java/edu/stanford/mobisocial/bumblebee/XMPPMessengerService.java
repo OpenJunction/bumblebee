@@ -10,13 +10,17 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class XMPPMessengerService extends MessengerService {
+
+	public static final String XMPP_SERVER = "prpl.stanford.edu";
+	public static final int XMPP_PORT = 5222;
+
 	private XMPPConnection mConnection = null;
 	private XMPPMessageFormat mFormat = null;
 	private String mUsername = null;
 	private String mPassword = null;
 	private LinkedBlockingQueue<OutgoingMessage> mSendQ = 
         new LinkedBlockingQueue<OutgoingMessage>();
-	public static final String XMPP_SERVER = "prpl.stanford.edu";
+
 	private Thread sendWorker = new Thread() {
             @Override
             public void run() {
@@ -80,7 +84,7 @@ public class XMPPMessengerService extends MessengerService {
         }
 
 		try {
-			mConnection = new XMPPConnection(XMPP_SERVER);
+			mConnection = newConnection();
             System.out.println("Connecting...");
 			mConnection.connect();
             addHandlers(mConnection);
@@ -103,7 +107,7 @@ public class XMPPMessengerService extends MessengerService {
                     removeHandlers(mConnection);
                     mConnection.disconnect();
 
-                    mConnection = new XMPPConnection(XMPP_SERVER);
+                    mConnection = newConnection();
                     mConnection.connect();
                     addHandlers(mConnection);
 					try {
@@ -123,6 +127,13 @@ public class XMPPMessengerService extends MessengerService {
 			Throwable ex = e.getWrappedThrowable();
 			ex.printStackTrace(System.err);
 		}
+    }
+
+    protected XMPPConnection newConnection(){
+        ConnectionConfiguration conf = 
+            new ConnectionConfiguration(XMPP_SERVER, XMPP_PORT);
+        conf.setReconnectionAllowed(false);
+        return new XMPPConnection(conf); 
     }
 
 	@Override
