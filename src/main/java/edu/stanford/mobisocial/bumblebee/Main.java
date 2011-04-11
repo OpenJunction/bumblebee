@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.File;
+import java.util.*;
 import java.security.KeyFactory;
 import java.security.spec.X509EncodedKeySpec;
 import edu.stanford.mobisocial.bumblebee.util.*;
@@ -129,10 +130,9 @@ public class Main {
 
 				if (!(curLine.equals("q"))) {
 					m.sendMessage(new OutgoingMessage() {
-                            public PublicKey toPublicKey() {
-                                return otherPubKey;
+                            public List<PublicKey> toPublicKeys() {
+                                return Collections.singletonList(otherPubKey);
                             }
-
                             public String contents() {
                                 return line;
                             }

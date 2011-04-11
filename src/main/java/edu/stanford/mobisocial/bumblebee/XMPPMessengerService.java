@@ -80,8 +80,7 @@ public class XMPPMessengerService extends MessengerService {
                 mConnection.disconnect();
             }
         }
-        catch(Exception e){
-        }
+        catch(Exception e){}
 
 		try {
 			mConnection = newConnection();
@@ -116,15 +115,14 @@ public class XMPPMessengerService extends MessengerService {
                         signalReady();
 					} catch (XMPPException ex) {
 						System.err.println("Login failed.");
-						System.err.println(ex);
+                        ex.printStackTrace(System.err);
 					}
 				} catch (XMPPException ex) {
 					System.err.println("User account creation failed due to: ");
-					System.err.println(ex);
+                    ex.printStackTrace(System.err);
 				}
 			}
-		} catch (XMPPException e) {
-			Throwable ex = e.getWrappedThrowable();
+		} catch (XMPPException ex) {
 			ex.printStackTrace(System.err);
 		}
     }
