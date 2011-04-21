@@ -27,6 +27,8 @@ public class XMPPMessageFormat {
 	public String prepareIncomingMessage(String s, PublicKey sender) throws CryptoException{
 		try {
 			String[] parts = s.split(",");
+			String personIdS = parts[0];
+			byte[] personIdBytes = Base64.decode(personIdS);
 			String aesKeyS = parts[1];
 			byte[] aesKeyBytes = Base64.decode(aesKeyS);
 			String sigS = parts[2];
@@ -36,15 +38,19 @@ public class XMPPMessageFormat {
 			String ciphS = parts[4];
 			byte[] ciphBytes = Base64.decode(ciphS);
 
-            // Verify signature on AES key
+            // Verify signature
 			Signature signature = Signature.getInstance("SHA1withRSA");
 			signature.initVerify(sender);
+			signature.update(personIdBytes);
 			signature.update(aesKeyBytes);
+			signature.update(ivBytes);
+			signature.update(ciphBytes);
+
             boolean status = signature.verify(sigBytes);
             if(!status){
                 throw new CryptoException();
             }
-			System.out.println("Verified signature on AES key!");
+			System.out.println("Verified signature!");
 
             // Decrypt AES key
 			Cipher keyCipher = Cipher.getInstance("RSA");
@@ -94,13 +100,6 @@ public class XMPPMessageFormat {
             os.close();
             byte[] aesKeyCipherBytes = out.toByteArray();
 
-            // Generate a signature of the AES key
-			Signature signature = Signature.getInstance("SHA1withRSA");
-			signature.initSign(mIdent.userPrivateKey(), new SecureRandom());
-			signature.update(aesKeyCipherBytes);
-			byte[] sigBytes = signature.sign();
-			System.out.println("Computed signature of length " + sigBytes.length);
-
             // Generate Initialization Vector for AES CBC mode
             SecureRandom random = new SecureRandom();
             byte[] iv = new byte[16];
@@ -118,6 +117,17 @@ public class XMPPMessageFormat {
 			System.out.println("Computed cipher of length " + cipherData.length);
 
 			byte[] personIdBytes = mIdent.userPersonId().getBytes("UTF8");
+
+            // Sign everything
+			Signature signature = Signature.getInstance("SHA1withRSA");
+			signature.initSign(mIdent.userPrivateKey(), new SecureRandom());
+			signature.update(personIdBytes);
+			signature.update(aesKeyCipherBytes);
+			signature.update(iv);
+			signature.update(cipherData);
+			byte[] sigBytes = signature.sign();
+			System.out.println("Computed signature of length " + sigBytes.length);
+
 
 			return (Base64.encodeToString(personIdBytes, false) + "," + 
                     Base64.encodeToString(aesKeyCipherBytes, false) + "," +
