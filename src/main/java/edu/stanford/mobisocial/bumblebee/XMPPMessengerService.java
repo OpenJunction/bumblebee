@@ -1,13 +1,13 @@
 package edu.stanford.mobisocial.bumblebee;
 import org.jivesoftware.smack.filter.PacketTypeFilter;
 import org.jivesoftware.smack.*;
-import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
 
 import java.security.PublicKey;
 import java.util.*;
 import java.util.concurrent.*;
+import org.jivesoftware.smack.packet.PacketExtension;
 
 public class XMPPMessengerService extends MessengerService {
 
@@ -28,22 +28,27 @@ public class XMPPMessengerService extends MessengerService {
                     try {
                         OutgoingMessage m = mSendQ.peek();
                         if (connectedToInternet() && (m != null) && connected()) {
-                            System.out
-								.println("Pulled message off sendQueue. Sending.");
+                            System.out.println("Pulled message off sendQueue. Sending.");
                             mSendQ.poll();
                             String plain = m.contents();
                             try {
+                                XEP0033Header header = new XEP0033Header();
+                                for(PublicKey pubKey : m.toPublicKeys()){
+                                    String jid = identity().personIdForPublicKey(pubKey) 
+                                        + "@" + XMPP_SERVER;
+                                    header.addAddress("to", jid);
+                                }
                                 for(PublicKey pubKey : m.toPublicKeys()){
                                     String cypher = mFormat.prepareOutgoingMessage(
                                         plain, pubKey);
                                     Message msg = new Message();
                                     msg.setFrom(mUsername + "@" + XMPP_SERVER);
                                     msg.setBody(cypher);
-                                    String jid = identity().personIdForPublicKey(
-                                        pubKey) + "@" + XMPP_SERVER;
-                                    msg.setTo(jid);
+                                    msg.setTo(XMPP_SERVER);
+                                    msg.addExtension(header);
                                     mConnection.sendPacket(msg);
                                 }
+
                             } catch (CryptoException e) {
                                 e.printStackTrace(System.err);
                             }
@@ -68,6 +73,24 @@ public class XMPPMessengerService extends MessengerService {
 		sendWorker.start();
         mFormat = new XMPPMessageFormat(ident);
 	}
+
+    private class XEP0033Header implements PacketExtension{
+        List<String> addresses = new ArrayList<String>();
+        public void addAddress(String type, String jid){
+            addresses.add("<address type=\"" + type + "\" jid=\"" + jid + "\" />");
+        }
+        public String getElementName(){ return "addresses";}
+        public String getNamespace(){ return "http://jabber.org/protocol/address";}
+        public String toXML(){
+            String xml = "<" + getElementName() + " xmlns=\"" + 
+                getNamespace() +  "\">";
+            for(String a : addresses){
+                xml += a;
+            }
+            xml += "</" + getElementName() + ">";
+            return xml;
+        }
+    }
 
     synchronized private void reconnect(){
 		if ((mUsername == null) || (mPassword == null)) {
