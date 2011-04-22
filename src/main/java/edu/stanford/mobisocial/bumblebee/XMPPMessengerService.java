@@ -38,16 +38,14 @@ public class XMPPMessengerService extends MessengerService {
                                         + "@" + XMPP_SERVER;
                                     header.addAddress("to", jid);
                                 }
-                                for(PublicKey pubKey : m.toPublicKeys()){
-                                    String cypher = mFormat.prepareOutgoingMessage(
-                                        plain, pubKey);
-                                    Message msg = new Message();
-                                    msg.setFrom(mUsername + "@" + XMPP_SERVER);
-                                    msg.setBody(cypher);
-                                    msg.setTo(XMPP_SERVER);
-                                    msg.addExtension(header);
-                                    mConnection.sendPacket(msg);
-                                }
+                                String cypher = mFormat.prepareOutgoingMessage(
+                                    plain, m.toPublicKeys());
+                                Message msg = new Message();
+                                msg.setFrom(mUsername + "@" + XMPP_SERVER);
+                                msg.setBody(cypher);
+                                msg.setTo(XMPP_SERVER);
+                                msg.addExtension(header);
+                                mConnection.sendPacket(msg);
 
                             } catch (CryptoException e) {
                                 e.printStackTrace(System.err);
@@ -187,37 +185,40 @@ public class XMPPMessengerService extends MessengerService {
 
     private PacketListener mPacketListener = new PacketListener() {
             public void processPacket(final Packet p) {
-                System.out.println("Processing " + p);
-                final Message m = (Message) p;
-                final String body = m.getBody();
-                final String jid = m.getFrom();
-
-
-                String id = mFormat.getMessagePersonId(body);
-                if (!(jid.startsWith(id))) {
-                    System.err.println("WTF! person id in message does not match sender!.");
-                    return;
-                }
-                PublicKey pubKey = identity().publicKeyForPersonId(id);
-                if (pubKey == null) {
-                    System.err.println("WTF! message from unrecognized sender! " + id);
-                    return;
-                }
-
                 try{
-                    final String contents = mFormat.prepareIncomingMessage(body, pubKey);
-                    int i = jid.indexOf("@");
-                    final String from = i > -1 ? jid.substring(0, i) : jid;
-                    signalMessageReceived(
-                        new IncomingMessage() {
-                            public String from() { return from; }
-                            public String contents() { return contents; }
-                            public String toString() { return contents(); }
-                        });
+                    final Message m = (Message) p;
+                    final String body = m.getBody();
+                    final String jid = m.getFrom();
+
+                    String id = mFormat.getMessagePersonId(body);
+                    if (id == null || !(jid.startsWith(id))) {
+                        System.err.println("WTF! person id in message does not match sender!.");
+                        return;
+                    }
+                    PublicKey pubKey = identity().publicKeyForPersonId(id);
+                    if (pubKey == null) {
+                        System.err.println("WTF! message from unrecognized sender! " + id);
+                        return;
+                    }
+                    try{
+                        final String contents = mFormat.prepareIncomingMessage(body, pubKey);
+                        int i = jid.indexOf("@");
+                        final String from = i > -1 ? jid.substring(0, i) : jid;
+                        signalMessageReceived(
+                            new IncomingMessage() {
+                                public String from() { return from; }
+                                public String contents() { return contents; }
+                                public String toString() { return contents(); }
+                            });
+                    }
+                    catch(CryptoException e){
+                        System.err.println("Failed in processing incoming message! Reason:");
+                        e.printStackTrace(System.err);
+                    }
                 }
-                catch(CryptoException e){
-                    System.err.println("Failed in processing incoming message! Reason:");
-                    e.printStackTrace(System.err);
+                catch(Exception e){
+                    System.err.println("Error handling incoming message. Reason:");
+                    e.printStackTrace(System.err);                    
                 }
             }
         };

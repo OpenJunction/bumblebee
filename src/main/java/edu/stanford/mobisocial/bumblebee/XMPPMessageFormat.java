@@ -1,6 +1,8 @@
 package edu.stanford.mobisocial.bumblebee;
 import edu.stanford.mobisocial.bumblebee.util.*;
 import java.security.*;
+import java.util.Arrays;
+import java.util.List;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 import java.io.*;
@@ -18,65 +20,98 @@ public class XMPPMessageFormat {
 
 	public String getMessagePersonId(String s) {
         try{
-            String[] parts = s.split(",");
-            return new String(Base64.decode(parts[0]), "UTF8");
-        }catch(UnsupportedEncodingException e){ return null; }
+            int sep = s.indexOf(",");
+            if(sep == -1){ return null; }
+            byte[] bodyBytes = Base64.decode(s.substring(sep + 1));
+            ObjectInputStream in = new ObjectInputStream(
+                new ByteArrayInputStream(bodyBytes));
+            short len = in.readShort();
+            byte[] idBytes = new byte[len];
+            in.readFully(idBytes);
+            return new String(idBytes, "UTF8");
+        }catch(UnsupportedEncodingException e){ e.printStackTrace(System.err); return null; }
+        catch(IOException e){ e.printStackTrace(System.err); return null; }
 	}
 
 
 	public String prepareIncomingMessage(String s, PublicKey sender) throws CryptoException{
 		try {
-			String[] parts = s.split(",");
-			String personIdS = parts[0];
-			byte[] personIdBytes = Base64.decode(personIdS);
-			String aesKeyS = parts[1];
-			byte[] aesKeyBytes = Base64.decode(aesKeyS);
-			String sigS = parts[2];
-			byte[] sigBytes = Base64.decode(sigS);
-			String ivS = parts[3];
-			byte[] ivBytes = Base64.decode(ivS);
-			String ciphS = parts[4];
-			byte[] ciphBytes = Base64.decode(ciphS);
+            int sep = s.indexOf(",");
+            if(sep == -1){throw new CryptoException("No tag seperator.");}
+            byte[] sigBytes = Base64.decode(s.substring(0, sep));
+            byte[] bodyBytes = Base64.decode(s.substring(sep + 1));
 
-            // Verify signature
-			Signature signature = Signature.getInstance("SHA1withRSA");
+            Signature signature = Signature.getInstance("SHA1withRSA");
 			signature.initVerify(sender);
-			signature.update(personIdBytes);
-			signature.update(aesKeyBytes);
-			signature.update(ivBytes);
-			signature.update(ciphBytes);
-
+            signature.update(bodyBytes);
             boolean status = signature.verify(sigBytes);
-            if(!status){
-                throw new CryptoException();
+            if(!status){throw new CryptoException("Failed to verify signature.");}
+
+            ByteArrayInputStream bi = new ByteArrayInputStream(bodyBytes);
+            ObjectInputStream in = new ObjectInputStream(bi);
+
+            short fromPidLen = in.readShort();
+            in.skipBytes(fromPidLen);
+
+			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");            
+
+            short numKeys = in.readShort();
+            byte[] keyBytesE = null;
+            for(int i = 0; i < numKeys; i++){
+                short idLen = in.readShort();
+                if(keyBytesE != null) {
+                    in.skipBytes(idLen);
+                    short keyLen = in.readShort();
+                    in.skipBytes(keyLen);
+                }
+                else{
+                    byte[] pidBytes = new byte[idLen];
+                    in.readFully(pidBytes);
+                    short keyLen = in.readShort();
+                    if(Arrays.equals(pidBytes, userPidBytes)){
+                        keyBytesE = new byte[keyLen];
+                        in.readFully(keyBytesE);
+                    }
+                    else {
+                        in.skipBytes(keyLen);
+                    }
+                }
             }
-			System.out.println("Verified signature!");
+
+            if(keyBytesE == null){
+                throw new CryptoException("No key in message for this user!");
+            }
 
             // Decrypt AES key
 			Cipher keyCipher = Cipher.getInstance("RSA");
             keyCipher.init(Cipher.DECRYPT_MODE, mIdent.userPrivateKey());
             CipherInputStream is = new CipherInputStream(
-                new ByteArrayInputStream(aesKeyBytes), keyCipher);
+                new ByteArrayInputStream(keyBytesE), keyCipher);
             byte[] aesKey = new byte[AES_Key_Size/8];
             is.read(aesKey);
             is.close();
-            SecretKeySpec aeskeySpec = new SecretKeySpec(aesKey, "AES");
-			System.out.println("Decrypted AES key");
 
+            short ivLen = in.readShort();
+            byte[] ivBytes = new byte[ivLen];
+            in.readFully(ivBytes);
+
+            int dataLen = in.readInt();
+            // Note the rest of the bytes are the body.
+            // We'll just pipe them into the decrypt stream...
 
             // Use AES key to decrypt the body
+            SecretKeySpec aeskeySpec = new SecretKeySpec(aesKey, "AES");
             IvParameterSpec ivspec = new IvParameterSpec(ivBytes);
             Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipher.init(Cipher.DECRYPT_MODE, aeskeySpec, ivspec);
-            is = new CipherInputStream(
-                new ByteArrayInputStream(ciphBytes), cipher);
+            is = new CipherInputStream(in, cipher);
             ByteArrayOutputStream plainOut = new ByteArrayOutputStream();
             Util.copy(is, plainOut);
             is.close();
+
 			byte[] plainBytes = plainOut.toByteArray();
-
-
-			return new String(plainBytes, "UTF8");
+            String plainText = new String(plainBytes, "UTF8");
+			return plainText;
 
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
@@ -84,26 +119,51 @@ public class XMPPMessageFormat {
 		}
 	}
 
-	public String prepareOutgoingMessage(String s, PublicKey toPubKey)
+	public String prepareOutgoingMessage(String s, List<PublicKey> toPubKeys)
         throws CryptoException {
 		try {
 			byte[] plain = s.getBytes("UTF8");
             byte[] aesKey = makeAESKey();
             SecretKeySpec aesSpec = new SecretKeySpec(aesKey, "AES");
 
-            // Encrypt the AES key with RSA
-			Cipher cipher = Cipher.getInstance("RSA");
-			cipher.init(Cipher.ENCRYPT_MODE, toPubKey);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            CipherOutputStream os = new CipherOutputStream(out, cipher);
-            os.write(aesKey);
-            os.close();
-            byte[] aesKeyCipherBytes = out.toByteArray();
+			Signature signature = Signature.getInstance("SHA1withRSA");
+			signature.initSign(mIdent.userPrivateKey(), new SecureRandom());
+
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            SignatureOutputStream so = new SignatureOutputStream(bo, signature);
+            ObjectOutputStream out = new ObjectOutputStream(so);
+            
+			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");
+            out.writeShort(userPidBytes.length);
+            out.write(userPidBytes);
+
+            out.writeShort(toPubKeys.size());
+
+            // Encrypt the AES key with each key in toPubKeys
+            for(PublicKey pubk : toPubKeys){
+                Cipher cipher = Cipher.getInstance("RSA");
+                cipher.init(Cipher.ENCRYPT_MODE, pubk);
+                ByteArrayOutputStream ks = new ByteArrayOutputStream();
+                CipherOutputStream os = new CipherOutputStream(ks, cipher);
+                os.write(aesKey);
+                os.close();
+                byte[] aesKeyCipherBytes = ks.toByteArray();
+                
+                String pid = mIdent.personIdForPublicKey(pubk);
+                byte[] toPersonIdBytes = pid.getBytes("UTF8");
+                out.writeShort(toPersonIdBytes.length);
+                out.write(toPersonIdBytes);
+
+                out.writeShort(aesKeyCipherBytes.length);
+                out.write(aesKeyCipherBytes);
+            }
 
             // Generate Initialization Vector for AES CBC mode
             SecureRandom random = new SecureRandom();
             byte[] iv = new byte[16];
             random.nextBytes(iv);
+            out.writeShort(iv.length);
+            out.write(iv);
 
             // Use AES key to encrypt the body
             IvParameterSpec ivspec = new IvParameterSpec(iv);
@@ -114,26 +174,14 @@ public class XMPPMessageFormat {
             aesOut.write(plain);
             aesOut.close();
 			byte[] cipherData = cipherOut.toByteArray();
-			System.out.println("Computed cipher of length " + cipherData.length);
+            out.writeInt(cipherData.length);
+            out.write(cipherData);
+            out.close();
 
-			byte[] personIdBytes = mIdent.userPersonId().getBytes("UTF8");
-
-            // Sign everything
-			Signature signature = Signature.getInstance("SHA1withRSA");
-			signature.initSign(mIdent.userPrivateKey(), new SecureRandom());
-			signature.update(personIdBytes);
-			signature.update(aesKeyCipherBytes);
-			signature.update(iv);
-			signature.update(cipherData);
 			byte[] sigBytes = signature.sign();
-			System.out.println("Computed signature of length " + sigBytes.length);
+            byte[] allBytes = bo.toByteArray();
 
-
-			return (Base64.encodeToString(personIdBytes, false) + "," + 
-                    Base64.encodeToString(aesKeyCipherBytes, false) + "," +
-                    Base64.encodeToString(sigBytes, false) + "," + 
-                    Base64.encodeToString(iv, false) + "," +
-                    Base64.encodeToString(cipherData, false));
+			return Base64.encodeToString(sigBytes, false) + "," + Base64.encodeToString(allBytes, false);
 
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
