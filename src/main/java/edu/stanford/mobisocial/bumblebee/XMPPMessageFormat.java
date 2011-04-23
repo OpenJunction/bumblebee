@@ -34,7 +34,7 @@ public class XMPPMessageFormat {
         public int getPos(){ return pos; }
     }
 
-	public String prepareIncomingMessage(byte[] s, PublicKey sender) throws CryptoException{
+	public String decodeIncomingMessage(byte[] s, PublicKey sender) throws CryptoException{
 		try {
             ByteArrayInputStreamWithPos bi = new ByteArrayInputStreamWithPos(s);
             DataInputStream in = new DataInputStream(bi);
@@ -118,7 +118,7 @@ public class XMPPMessageFormat {
 		}
 	}
 
-	public byte[] prepareOutgoingMessage(String s, List<PublicKey> toPubKeys)
+	public byte[] encodeOutgoingMessage(String s, List<PublicKey> toPubKeys)
         throws CryptoException {
 		try {
 			byte[] plain = s.getBytes("UTF8");

@@ -39,7 +39,7 @@ public class XMPPMessengerService extends MessengerService {
                                         + "@" + XMPP_SERVER;
                                     header.addAddress("to", jid);
                                 }
-                                byte[] cyphered = mFormat.prepareOutgoingMessage(
+                                byte[] cyphered = mFormat.encodeOutgoingMessage(
                                     plain, m.toPublicKeys());
                                 String msgText = Base64.encodeToString(cyphered, false);
                                 Message msg = new Message();
@@ -204,7 +204,7 @@ public class XMPPMessengerService extends MessengerService {
                         return;
                     }
                     try{
-                        final String contents = mFormat.prepareIncomingMessage(body, pubKey);
+                        final String contents = mFormat.decodeIncomingMessage(body, pubKey);
                         int i = jid.indexOf("@");
                         final String from = i > -1 ? jid.substring(0, i) : jid;
                         signalMessageReceived(
