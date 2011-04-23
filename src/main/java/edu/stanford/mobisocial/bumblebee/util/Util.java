@@ -17,6 +17,16 @@ public class Util {
 		}
 	}
 
+    /**
+     * Return true if the byte ranges are identical.
+     */
+	public static final boolean bytesEqual(final byte[] b1, final int j, final byte[] b2,  final int k, final int len){
+        for(int i = 0; i < len; i++){
+            if(b1[i + j] != b2[i + k]) return false;
+        }
+        return true;
+	}
+
 	private static String convertToHex(byte[] data) {
 		StringBuffer buf = new StringBuffer();
 

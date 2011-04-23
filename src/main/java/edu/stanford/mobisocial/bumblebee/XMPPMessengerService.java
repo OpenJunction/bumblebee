@@ -1,4 +1,5 @@
 package edu.stanford.mobisocial.bumblebee;
+import edu.stanford.mobisocial.bumblebee.util.Base64;
 import org.jivesoftware.smack.filter.PacketTypeFilter;
 import org.jivesoftware.smack.*;
 import org.jivesoftware.smack.packet.Message;
@@ -38,11 +39,12 @@ public class XMPPMessengerService extends MessengerService {
                                         + "@" + XMPP_SERVER;
                                     header.addAddress("to", jid);
                                 }
-                                String cypher = mFormat.prepareOutgoingMessage(
+                                byte[] cyphered = mFormat.prepareOutgoingMessage(
                                     plain, m.toPublicKeys());
+                                String msgText = Base64.encodeToString(cyphered, false);
                                 Message msg = new Message();
                                 msg.setFrom(mUsername + "@" + XMPP_SERVER);
-                                msg.setBody(cypher);
+                                msg.setBody(msgText);
                                 msg.setTo(XMPP_SERVER);
                                 msg.addExtension(header);
                                 mConnection.sendPacket(msg);
@@ -187,8 +189,9 @@ public class XMPPMessengerService extends MessengerService {
             public void processPacket(final Packet p) {
                 try{
                     final Message m = (Message) p;
-                    final String body = m.getBody();
                     final String jid = m.getFrom();
+                    final byte[] body = Base64.decode(m.getBody());
+                    if(body == null) throw new RuntimeException("Could not decode message.");
 
                     String id = mFormat.getMessagePersonId(body);
                     if (id == null || !(jid.startsWith(id))) {

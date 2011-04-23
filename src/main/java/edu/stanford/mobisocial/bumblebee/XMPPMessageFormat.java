@@ -12,48 +12,46 @@ import javax.crypto.*;
 public class XMPPMessageFormat {
 
     public static final int AES_Key_Size = 128;
+    public static final int SHORT_LEN = 2;
     private TransportIdentityProvider mIdent;
 
 	public XMPPMessageFormat(TransportIdentityProvider ident) {
         mIdent = ident;
 	}
 
-	public String getMessagePersonId(String s) {
+	public String getMessagePersonId(byte[] s) {
         try{
-            int sep = s.indexOf(",");
-            if(sep == -1){ return null; }
-            byte[] bodyBytes = Base64.decode(s.substring(sep + 1));
-            ObjectInputStream in = new ObjectInputStream(
-                new ByteArrayInputStream(bodyBytes));
-            short len = in.readShort();
-            byte[] idBytes = new byte[len];
-            in.readFully(idBytes);
-            return new String(idBytes, "UTF8");
-        }catch(UnsupportedEncodingException e){ e.printStackTrace(System.err); return null; }
-        catch(IOException e){ e.printStackTrace(System.err); return null; }
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(s));
+            short sigLen = in.readShort();
+            in.skipBytes(sigLen);
+            short fromPidLen = in.readShort();
+            return new String(s, SHORT_LEN + sigLen + SHORT_LEN, fromPidLen, "UTF8");
+        }catch(Exception e){ e.printStackTrace(System.err); return null; }
 	}
 
+    private class ByteArrayInputStreamWithPos extends ByteArrayInputStream{
+        public ByteArrayInputStreamWithPos(byte[] b){ super(b); }
+        public int getPos(){ return pos; }
+    }
 
-	public String prepareIncomingMessage(String s, PublicKey sender) throws CryptoException{
+	public String prepareIncomingMessage(byte[] s, PublicKey sender) throws CryptoException{
 		try {
-            int sep = s.indexOf(",");
-            if(sep == -1){throw new CryptoException("No tag seperator.");}
-            byte[] sigBytes = Base64.decode(s.substring(0, sep));
-            byte[] bodyBytes = Base64.decode(s.substring(sep + 1));
+            ByteArrayInputStreamWithPos bi = new ByteArrayInputStreamWithPos(s);
+            DataInputStream in = new DataInputStream(bi);
+
+            short sigLen = in.readShort();
+            in.skipBytes(sigLen);
 
             Signature signature = Signature.getInstance("SHA1withRSA");
 			signature.initVerify(sender);
-            signature.update(bodyBytes);
-            boolean status = signature.verify(sigBytes);
+            signature.update(s, SHORT_LEN + sigLen, s.length - (SHORT_LEN + sigLen));
+            boolean status = signature.verify(s, SHORT_LEN, sigLen);
             if(!status){throw new CryptoException("Failed to verify signature.");}
-
-            ByteArrayInputStream bi = new ByteArrayInputStream(bodyBytes);
-            ObjectInputStream in = new ObjectInputStream(bi);
 
             short fromPidLen = in.readShort();
             in.skipBytes(fromPidLen);
 
-			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");            
+			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");
 
             short numKeys = in.readShort();
             byte[] keyBytesE = null;
@@ -65,14 +63,15 @@ public class XMPPMessageFormat {
                     in.skipBytes(keyLen);
                 }
                 else{
-                    byte[] pidBytes = new byte[idLen];
-                    in.readFully(pidBytes);
-                    short keyLen = in.readShort();
-                    if(Arrays.equals(pidBytes, userPidBytes)){
+                    if(Util.bytesEqual(s, bi.getPos(), userPidBytes, 0, idLen)){
+                        in.skipBytes(idLen);
+                        short keyLen = in.readShort();
                         keyBytesE = new byte[keyLen];
                         in.readFully(keyBytesE);
                     }
                     else {
+                        in.skipBytes(idLen);
+                        short keyLen = in.readShort();
                         in.skipBytes(keyLen);
                     }
                 }
@@ -119,7 +118,7 @@ public class XMPPMessageFormat {
 		}
 	}
 
-	public String prepareOutgoingMessage(String s, List<PublicKey> toPubKeys)
+	public byte[] prepareOutgoingMessage(String s, List<PublicKey> toPubKeys)
         throws CryptoException {
 		try {
 			byte[] plain = s.getBytes("UTF8");
@@ -131,7 +130,7 @@ public class XMPPMessageFormat {
 
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             SignatureOutputStream so = new SignatureOutputStream(bo, signature);
-            ObjectOutputStream out = new ObjectOutputStream(so);
+            DataOutputStream out = new DataOutputStream(so);
             
 			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");
             out.writeShort(userPidBytes.length);
@@ -179,9 +178,14 @@ public class XMPPMessageFormat {
             out.close();
 
 			byte[] sigBytes = signature.sign();
-            byte[] allBytes = bo.toByteArray();
-
-			return Base64.encodeToString(sigBytes, false) + "," + Base64.encodeToString(allBytes, false);
+            byte[] allBytes = new byte[SHORT_LEN + sigBytes.length + bo.size()];
+            DataOutputStream finalOut = new DataOutputStream(
+                new ByteArrayStreamWrapper(allBytes));
+            finalOut.writeShort(sigBytes.length);
+            finalOut.write(sigBytes);
+            bo.writeTo(finalOut);
+            finalOut.close();
+			return allBytes;
 
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
