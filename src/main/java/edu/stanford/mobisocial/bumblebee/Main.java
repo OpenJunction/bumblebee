@@ -71,15 +71,22 @@ public class Main {
 
 	public static void main(String[] args) {
 		final String myKeyPrefix = args[0];
-		final String otherKeyPrefix = args[1];
+
 		final PublicKey myPubKey = loadPublicKey("etc/" + myKeyPrefix
                                                  + "_public_key.der");
 		final PrivateKey myPrivKey = loadPrivateKey("etc/" + myKeyPrefix
                                                     + "_private_key.der");
-		final PublicKey otherPubKey = loadPublicKey("etc/" + otherKeyPrefix
-                                                    + "_public_key.der");
 
-        System.out.println(Base64.encodeToString(myPubKey.getEncoded(), false));
+        System.out.println("Loaded keypair for " + myKeyPrefix);
+
+        final List<PublicKey> otherKeys = new ArrayList<PublicKey>();
+
+        for(int i = 1; i < args.length; i++){
+            final String otherKeyPrefix = args[i];
+            otherKeys.add(loadPublicKey("etc/" + otherKeyPrefix
+                                        + "_public_key.der"));
+            System.out.println("Loaded public key for " + otherKeyPrefix);
+        }
 
         TransportIdentityProvider ident = new TransportIdentityProvider(){
                 public PublicKey userPublicKey() { return myPubKey; }
@@ -89,8 +96,11 @@ public class Main {
                     if(id.equals(personIdForPublicKey(myPubKey))){
                         return myPubKey;
                     }
-                    else if(id.equals(personIdForPublicKey(otherPubKey))) {
-                        return otherPubKey;
+                    else {
+                        for(PublicKey otherPubKey : otherKeys){
+                            if(id.equals(personIdForPublicKey(otherPubKey)))
+                                return otherPubKey;
+                        }
                     }
                     return null;
                 }
@@ -112,32 +122,29 @@ public class Main {
             });
 		m.addMessageListener(new MessageListener() {
                 public void onMessage(IncomingMessage m) {
-                    System.out.println("Got message! " + m.toString());
+                    System.out.println(">  " + m.toString());
                 }
             });
 
 		m.init();
 
 		try {
-			String curLine = ""; // Line read from standard in
+			String curLine = null; // Line read from standard in
 			InputStreamReader converter = new InputStreamReader(System.in);
 			BufferedReader in = new BufferedReader(converter);
 
-			while (!(curLine.equals("q"))) {
+			while (curLine == null || !curLine.equals("")) {
 				curLine = in.readLine();
-
 				final String line = curLine;
-
-				if (!(curLine.equals("q"))) {
+				if (!(curLine.equals(""))) {
 					m.sendMessage(new OutgoingMessage() {
                             public List<PublicKey> toPublicKeys() {
-                                return Collections.singletonList(otherPubKey);
+                                return otherKeys;
                             }
                             public String contents() {
                                 return line;
                             }
                         });
-					System.out.println("You typed: " + curLine);
 				}
 			}
 		} catch (IOException e) {

@@ -29,7 +29,6 @@ public class XMPPMessengerService extends MessengerService {
                     try {
                         OutgoingMessage m = mSendQ.peek();
                         if (connectedToInternet() && (m != null) && connected()) {
-                            System.out.println("Pulled message off sendQueue. Sending.");
                             mSendQ.poll();
                             String plain = m.contents();
                             try {
