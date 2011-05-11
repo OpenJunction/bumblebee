@@ -144,7 +144,8 @@ public class XMPPMessengerService extends MessengerService {
                     ex.printStackTrace(System.err);
 				}
 			}
-		} catch (XMPPException ex) {
+		} catch (Exception ex) {
+            System.err.println("XMPPMessengerService: Reconnect failed.");
 			ex.printStackTrace(System.err);
 		}
     }

@@ -1,13 +1,11 @@
 package edu.stanford.mobisocial.bumblebee;
 import edu.stanford.mobisocial.bumblebee.util.*;
-import java.security.*;
-import java.util.Arrays;
-import java.util.List;
-import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.IvParameterSpec;
 import java.io.*;
-
+import java.security.*;
+import java.util.List;
 import javax.crypto.*;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class XMPPMessageFormat {
 
