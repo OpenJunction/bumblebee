@@ -40,6 +40,11 @@ public class XMPPMessengerService extends MessengerService {
                                 }
                                 byte[] cyphered = mFormat.encodeOutgoingMessage(
                                     plain, m.toPublicKeys());
+                                try {
+                                   mFormat.decodeIncomingMessage(cyphered, null);
+                                } catch(Exception e) {
+                                    System.out.println("Failed local validation test....");
+                                }
                                 String msgText = Base64.encodeToString(cyphered, false);
                                 Message msg = new Message();
                                 msg.setFrom(mUsername + "@" + XMPP_SERVER);

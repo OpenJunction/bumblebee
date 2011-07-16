@@ -3,6 +3,7 @@ import edu.stanford.mobisocial.bumblebee.util.*;
 import java.io.*;
 import java.security.*;
 import java.util.List;
+import java.util.Arrays;
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -38,12 +39,18 @@ public class XMPPMessageFormat {
             DataInputStream in = new DataInputStream(bi);
 
             short sigLen = in.readShort();
-            in.skipBytes(sigLen);
+            byte[] sigIn = new byte[sigLen];
+            in.readFully(sigIn);
 
-            Signature signature = Signature.getInstance("SHA1withRSA");
-			signature.initVerify(sender);
-            signature.update(s, SHORT_LEN + sigLen, s.length - (SHORT_LEN + sigLen));
-            boolean status = signature.verify(s, SHORT_LEN, sigLen);
+            // Decrypt digest
+            Cipher sigcipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            sigcipher.init(Cipher.DECRYPT_MODE, sender == null ? mIdent.userPublicKey() : sender);
+            byte[] sigBytes = sigcipher.doFinal(sigIn);
+
+            MessageDigest sha1 = MessageDigest.getInstance("SHA1");
+            sha1.update(s, SHORT_LEN + sigLen, s.length - (SHORT_LEN + sigLen));
+            byte[] digest = sha1.digest();
+            boolean status = Arrays.equals(digest, sigBytes);
             if(!status){throw new CryptoException("Failed to verify signature.");}
 
             short fromPidLen = in.readShort();
@@ -123,12 +130,8 @@ public class XMPPMessageFormat {
             byte[] aesKey = makeAESKey();
             SecretKeySpec aesSpec = new SecretKeySpec(aesKey, "AES");
 
-			Signature signature = Signature.getInstance("SHA1withRSA");
-			signature.initSign(mIdent.userPrivateKey(), new SecureRandom());
-
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
-            SignatureOutputStream so = new SignatureOutputStream(bo, signature);
-            DataOutputStream out = new DataOutputStream(so);
+            DataOutputStream out = new DataOutputStream(bo);
             
 			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");
             out.writeShort(userPidBytes.length);
@@ -170,26 +173,34 @@ public class XMPPMessageFormat {
             CipherOutputStream aesOut = new CipherOutputStream(cipherOut, aesCipher);
             aesOut.write(plain);
             aesOut.close();
-			byte[] cipherData = cipherOut.toByteArray();
+            byte[] cipherData = cipherOut.toByteArray();
             out.writeInt(cipherData.length);
             out.write(cipherData);
             out.close();
+            bo.close();
+            
+            byte[] dataBytes = bo.toByteArray();
 
-			byte[] sigBytes = signature.sign();
-            byte[] allBytes = new byte[SHORT_LEN + sigBytes.length + bo.size()];
-            DataOutputStream finalOut = new DataOutputStream(
-                new ByteArrayStreamWrapper(allBytes));
+            MessageDigest sha1 = MessageDigest.getInstance("SHA1");
+            byte[] digest = sha1.digest(dataBytes);
+            // Encrypt digest
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, mIdent.userPrivateKey());
+            byte[] sigBytes = cipher.doFinal(digest);
+
+            ByteArrayOutputStream so = new ByteArrayOutputStream();
+            DataOutputStream finalOut = new DataOutputStream(so);
             finalOut.writeShort(sigBytes.length);
             finalOut.write(sigBytes);
-            bo.writeTo(finalOut);
+            finalOut.write(dataBytes);
             finalOut.close();
-			return allBytes;
+            return so.toByteArray();
 
-		} catch (Exception e) {
-			e.printStackTrace(System.err);
-			throw new CryptoException();
-		}
-	}
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+            throw new CryptoException();
+        }
+    }
 
 
     /**
