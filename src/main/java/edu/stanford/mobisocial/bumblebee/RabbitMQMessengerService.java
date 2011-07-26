@@ -155,10 +155,10 @@ public class RabbitMQMessengerService extends MessengerService {
 						
 						public void run() {
 					        boolean autoAck = false;
-					        QueueingConsumer consumer = new QueueingConsumer(inChannel);
 					        for(;;) {
 						        try {
 									inChannel = conn.createChannel();
+							        QueueingConsumer consumer = new QueueingConsumer(inChannel);
 									inChannel.queueDeclare(queueName, true, false, false, null);						
 							        inChannel.basicConsume(queueName, autoAck, consumer);
 							        for(;;) {
