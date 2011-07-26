@@ -5,6 +5,7 @@ import java.util.*;
 public abstract class MessengerService {
 	private Set<StateListener> stateListeners = new HashSet<StateListener>();
 	private Set<MessageListener> messageListeners = new HashSet<MessageListener>();
+	private Set<ConnectionStatusListener> statusListeners = new HashSet<ConnectionStatusListener>();
 	private final TransportIdentityProvider mIdent;
     private final ConnectionStatus mConnectionStatus;
 
@@ -25,6 +26,7 @@ public abstract class MessengerService {
 
 	public abstract void sendMessage(OutgoingMessage m);
 
+	//Do these all need to be synchronized... we definitely have threads roaming about...?
 	public void addStateListener(StateListener l) {
 		stateListeners.add(l);
 	}
@@ -33,12 +35,20 @@ public abstract class MessengerService {
 		messageListeners.add(l);
 	}
 
+	public void addConnectionStatusListener(ConnectionStatusListener l) {
+		statusListeners.add(l);
+	}
+
 	public void removeStateListener(StateListener l) {
 		stateListeners.remove(l);
 	}
 
 	public void removeMessageListener(MessageListener l) {
 		messageListeners.remove(l);
+	}
+
+	public void removeStatusListener(ConnectionStatus l) {
+		statusListeners.remove(l);
 	}
 
 	protected void signalReady() {
@@ -50,6 +60,12 @@ public abstract class MessengerService {
 	protected void signalNotReady() {
 		for (StateListener l : stateListeners) {
 			l.onNotReady();
+		}
+	}
+
+	protected void signalConnectionStatus(String msg, Exception e) {
+		for (ConnectionStatusListener l : statusListeners) {
+			l.onStatus(msg, e);
 		}
 	}
 
