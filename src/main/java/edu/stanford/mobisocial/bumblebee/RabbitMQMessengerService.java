@@ -144,6 +144,7 @@ public class RabbitMQMessengerService extends MessengerService {
 											}
 								        } catch(ShutdownSignalException e) {				        	
 											signalConnectionStatus("Forced shutdown in send AMQP", e);
+					                    	mSendQ.add(m);
 								        	return;
 								        }
 					                }
