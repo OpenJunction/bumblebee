@@ -99,7 +99,9 @@ public class RabbitMQMessengerService extends MessengerService {
 			            public void run() {
 					        for(;;) {
 					        	try {
-									outChannel = conn.createChannel();
+					        		synchronized(conn) {
+					        			outChannel = conn.createChannel();
+					        		}
 				                	outChannel.setReturnListener(new ReturnListener() {
 										public void handleReturn(int reply_code, String arg1, String arg2, String arg3,
 												BasicProperties arg4, byte[] body) throws IOException {
@@ -129,7 +131,9 @@ public class RabbitMQMessengerService extends MessengerService {
 					                    } catch(CryptoException e) {
 											signalConnectionStatus("Failed to handle message crypto", e);
 											try {
-												conn.close();
+								        		synchronized(conn) {
+								        			conn.close();
+								        		}
 											} catch(IOException e1) {}
 					                    } catch (IOException e) {
 											signalConnectionStatus("Failed to send message over AMQP connection", e);
@@ -157,33 +161,40 @@ public class RabbitMQMessengerService extends MessengerService {
 					        boolean autoAck = false;
 					        for(;;) {
 						        try {
-									inChannel = conn.createChannel();
+					        		synchronized(conn) {
+					        			inChannel = conn.createChannel();
+					        		}
 							        QueueingConsumer consumer = new QueueingConsumer(inChannel);
 									inChannel.queueDeclare(queueName, true, false, false, null);						
 							        inChannel.basicConsume(queueName, autoAck, consumer);
 							        for(;;) {
-							            QueueingConsumer.Delivery delivery;
+							            QueueingConsumer.Delivery delivery = null;
 							            try {
 							                delivery = consumer.nextDelivery(15000);
 							            } catch (InterruptedException ie) {
-							                continue;
 							            }
 										if(!conn.isOpen())
 											return;
 							            if(delivery == null)
 							            	continue;
 							            final byte[] body = delivery.getBody();
-							            if(body == null) throw new RuntimeException("Could not decode message.");
+							            if(body == null) {
+					                        System.err.println("Could not decode message.");
+							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
+							            	continue;
+							            }
 					
 					                    final String id = mFormat.getMessagePersonId(body);
 					                    if (id == null) {
 					                        System.err.println("WTF! person id in message does not match sender!.");
-					                        return;
+							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
+							            	continue;
 					                    }
 					                    RSAPublicKey pubKey = identity().publicKeyForPersonId(id);
 					                    if (pubKey == null) {
 					                        System.err.println("WTF! message from unrecognized sender! " + id);
-					                        return;
+							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
+							            	continue;
 					                    }
 							            
 					                    final String contents = mFormat.decodeIncomingMessage(body, pubKey);
@@ -198,7 +209,9 @@ public class RabbitMQMessengerService extends MessengerService {
 			                    } catch(CryptoException e) {
 									signalConnectionStatus("Failed to handle message crypto", e);
 									try {
-										conn.close();
+						        		synchronized(conn) {
+						        			conn.close();
+						        		}
 									} catch(IOException e1) {}
 									return;
 						        } catch(IOException e) {
