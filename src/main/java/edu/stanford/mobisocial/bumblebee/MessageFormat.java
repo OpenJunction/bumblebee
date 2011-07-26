@@ -2,19 +2,20 @@ package edu.stanford.mobisocial.bumblebee;
 import edu.stanford.mobisocial.bumblebee.util.*;
 import java.io.*;
 import java.security.*;
+import java.security.interfaces.RSAPublicKey;
 import java.util.List;
 import java.util.Arrays;
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-public class XMPPMessageFormat {
+public class MessageFormat {
 
     public static final int AES_Key_Size = 128;
     public static final int SHORT_LEN = 2;
     private TransportIdentityProvider mIdent;
 
-	public XMPPMessageFormat(TransportIdentityProvider ident) {
+	public MessageFormat(TransportIdentityProvider ident) {
         mIdent = ident;
 	}
 
@@ -119,11 +120,11 @@ public class XMPPMessageFormat {
 
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
-			throw new CryptoException();
+			throw new RuntimeException("crypto-failure", e);
 		}
 	}
 
-	public byte[] encodeOutgoingMessage(String s, List<PublicKey> toPubKeys)
+	public byte[] encodeOutgoingMessage(String s, List<RSAPublicKey> toPubKeys)
         throws CryptoException {
 		try {
 			byte[] plain = s.getBytes("UTF8");
@@ -140,7 +141,7 @@ public class XMPPMessageFormat {
             out.writeShort(toPubKeys.size());
 
             // Encrypt the AES key with each key in toPubKeys
-            for(PublicKey pubk : toPubKeys){
+            for(RSAPublicKey pubk : toPubKeys){
                 Cipher cipher = Cipher.getInstance("RSA");
                 cipher.init(Cipher.ENCRYPT_MODE, pubk);
                 ByteArrayOutputStream ks = new ByteArrayOutputStream();

@@ -1,4 +1,6 @@
 package edu.stanford.mobisocial.bumblebee;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.PublicKey;
 import java.security.PrivateKey;
@@ -72,39 +74,39 @@ public class Main {
 	public static void main(String[] args) {
 		final String myKeyPrefix = args[0];
 
-		final PublicKey myPubKey = loadPublicKey("etc/" + myKeyPrefix
+		final RSAPublicKey myPubKey = (RSAPublicKey)loadPublicKey("etc/" + myKeyPrefix
                                                  + "_public_key.der");
-		final PrivateKey myPrivKey = loadPrivateKey("etc/" + myKeyPrefix
+		final RSAPrivateKey myPrivKey = (RSAPrivateKey)loadPrivateKey("etc/" + myKeyPrefix
                                                     + "_private_key.der");
 
         System.out.println("Loaded keypair for " + myKeyPrefix);
 
-        final List<PublicKey> otherKeys = new ArrayList<PublicKey>();
+        final List<RSAPublicKey> otherKeys = new ArrayList<RSAPublicKey>();
 
         for(int i = 1; i < args.length; i++){
             final String otherKeyPrefix = args[i];
-            otherKeys.add(loadPublicKey("etc/" + otherKeyPrefix
+            otherKeys.add((RSAPublicKey)loadPublicKey("etc/" + otherKeyPrefix
                                         + "_public_key.der"));
             System.out.println("Loaded public key for " + otherKeyPrefix);
         }
 
         TransportIdentityProvider ident = new TransportIdentityProvider(){
-                public PublicKey userPublicKey() { return myPubKey; }
-                public PrivateKey userPrivateKey(){ return myPrivKey; }
+                public RSAPublicKey userPublicKey() { return myPubKey; }
+                public RSAPrivateKey userPrivateKey(){ return myPrivKey; }
                 public String userPersonId(){ return personIdForPublicKey(userPublicKey()); }
-                public PublicKey publicKeyForPersonId(String id){
+                public RSAPublicKey publicKeyForPersonId(String id){
                     if(id.equals(personIdForPublicKey(myPubKey))){
                         return myPubKey;
                     }
                     else {
-                        for(PublicKey otherPubKey : otherKeys){
+                        for(RSAPublicKey otherPubKey : otherKeys){
                             if(id.equals(personIdForPublicKey(otherPubKey)))
                                 return otherPubKey;
                         }
                     }
                     return null;
                 }
-                public String personIdForPublicKey(PublicKey key){
+                public String personIdForPublicKey(RSAPublicKey key){
                     return makePersonIdForPublicKey(key);
                 }
             };
@@ -138,7 +140,7 @@ public class Main {
 				final String line = curLine;
 				if (!(curLine.equals(""))) {
 					m.sendMessage(new OutgoingMessage() {
-                            public List<PublicKey> toPublicKeys() {
+                            public List<RSAPublicKey> toPublicKeys() {
                                 return otherKeys;
                             }
                             public String contents() {

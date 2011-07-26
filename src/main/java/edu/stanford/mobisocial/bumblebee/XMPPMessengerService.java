@@ -6,6 +6,7 @@ import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Packet;
 
 import java.security.PublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.util.*;
 import java.util.concurrent.*;
 import org.jivesoftware.smack.packet.PacketExtension;
@@ -16,7 +17,7 @@ public class XMPPMessengerService extends MessengerService {
 	public static final int XMPP_PORT = 5222;
 
 	private XMPPConnection mConnection = null;
-	private XMPPMessageFormat mFormat = null;
+	private MessageFormat mFormat = null;
 	private String mUsername = null;
 	private String mPassword = null;
 	private LinkedBlockingQueue<OutgoingMessage> mSendQ = 
@@ -33,18 +34,13 @@ public class XMPPMessengerService extends MessengerService {
                             String plain = m.contents();
                             try {
                                 XEP0033Header header = new XEP0033Header();
-                                for(PublicKey pubKey : m.toPublicKeys()){
+                                for(RSAPublicKey pubKey : m.toPublicKeys()){
                                     String jid = identity().personIdForPublicKey(pubKey) 
                                         + "@" + XMPP_SERVER;
                                     header.addAddress("to", jid);
                                 }
                                 byte[] cyphered = mFormat.encodeOutgoingMessage(
                                     plain, m.toPublicKeys());
-                                try {
-                                   mFormat.decodeIncomingMessage(cyphered, null);
-                                } catch(Exception e) {
-                                    System.out.println("Failed local validation test....");
-                                }
                                 String msgText = Base64.encodeToString(cyphered, false);
                                 Message msg = new Message();
                                 msg.setFrom(mUsername + "@" + XMPP_SERVER);
@@ -75,7 +71,7 @@ public class XMPPMessengerService extends MessengerService {
 		mUsername = ident.userPersonId();
 		mPassword = mUsername + "pass";
 		sendWorker.start();
-        mFormat = new XMPPMessageFormat(ident);
+        mFormat = new MessageFormat(ident);
 	}
 
     private class XEP0033Header implements PacketExtension{
@@ -203,7 +199,7 @@ public class XMPPMessengerService extends MessengerService {
                         System.err.println("WTF! person id in message does not match sender!.");
                         return;
                     }
-                    PublicKey pubKey = identity().publicKeyForPersonId(id);
+                    RSAPublicKey pubKey = identity().publicKeyForPersonId(id);
                     if (pubKey == null) {
                         System.err.println("WTF! message from unrecognized sender! " + id);
                         return;
