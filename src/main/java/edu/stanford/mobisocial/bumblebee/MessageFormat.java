@@ -3,6 +3,7 @@ import edu.stanford.mobisocial.bumblebee.util.*;
 import java.io.*;
 import java.security.*;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.List;
 import java.util.Arrays;
 import javax.crypto.*;
@@ -21,11 +22,23 @@ public class MessageFormat {
 
 	public String getMessagePersonId(byte[] s) {
         try{
+        	RSAPublicKey k = getMessagePublicKey(s);
+        	if(k == null)
+        		return null;
+        	return mIdent.personIdForPublicKey(k);
+        }catch(Exception e){ e.printStackTrace(System.err); return null; }        
+	}
+	public RSAPublicKey getMessagePublicKey(byte[] s) {
+        try{
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(s));
             short sigLen = in.readShort();
             in.skipBytes(sigLen);
             short fromPidLen = in.readShort();
-            return new String(s, SHORT_LEN + sigLen + SHORT_LEN, fromPidLen, "UTF8");
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            byte[] dest = new byte[fromPidLen];
+            System.arraycopy(s, SHORT_LEN + sigLen + SHORT_LEN, dest, 0, fromPidLen);
+            X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(dest);
+            return (RSAPublicKey)keyFactory.generatePublic(publicKeySpec);                
         }catch(Exception e){ e.printStackTrace(System.err); return null; }
 	}
 
@@ -34,7 +47,7 @@ public class MessageFormat {
         public int getPos(){ return pos; }
     }
 
-	public String decodeIncomingMessage(byte[] s, PublicKey sender) throws CryptoException{
+	public String decodeIncomingMessage(byte[] s) throws CryptoException{
 		try {
             ByteArrayInputStreamWithPos bi = new ByteArrayInputStreamWithPos(s);
             DataInputStream in = new DataInputStream(bi);
@@ -44,8 +57,9 @@ public class MessageFormat {
             in.readFully(sigIn);
 
             // Decrypt digest
+            RSAPublicKey sender = getMessagePublicKey(s);
             Cipher sigcipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-            sigcipher.init(Cipher.DECRYPT_MODE, sender == null ? mIdent.userPublicKey() : sender);
+            sigcipher.init(Cipher.DECRYPT_MODE, sender);
             byte[] sigBytes = sigcipher.doFinal(sigIn);
 
             MessageDigest sha1 = MessageDigest.getInstance("SHA1");
@@ -134,7 +148,7 @@ public class MessageFormat {
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(bo);
             
-			byte[] userPidBytes = mIdent.userPersonId().getBytes("UTF8");
+			byte[] userPidBytes = mIdent.userPublicKey().getEncoded();
             out.writeShort(userPidBytes.length);
             out.write(userPidBytes);
 

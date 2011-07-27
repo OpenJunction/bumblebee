@@ -205,7 +205,7 @@ public class XMPPMessengerService extends MessengerService {
                         return;
                     }
                     try{
-                        final String contents = mFormat.decodeIncomingMessage(body, pubKey);
+                        final String contents = mFormat.decodeIncomingMessage(body);
                         int i = jid.indexOf("@");
                         final String from = i > -1 ? jid.substring(0, i) : jid;
                         signalMessageReceived(

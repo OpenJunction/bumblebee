@@ -282,14 +282,8 @@ public class RabbitMQMessengerService extends MessengerService {
 							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
 							            	continue;
 					                    }
-					                    RSAPublicKey pubKey = identity().publicKeyForPersonId(id);
-					                    if (pubKey == null) {
-					                        System.err.println("WTF! message from unrecognized sender! " + id);
-							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
-							            	continue;
-					                    }
 							            
-					                    final String contents = mFormat.decodeIncomingMessage(body, pubKey);
+					                    final String contents = mFormat.decodeIncomingMessage(body);
 					                    signalMessageReceived(
 					                        new IncomingMessage() {
 					                            public String from() { return id; }
