@@ -69,15 +69,12 @@ public class RabbitMQMessengerService extends MessengerService {
 	}
 	
 	boolean shutdown;
-	
-	HashMap<byte[], String> pendingMessages;
-	
+		
 	public RabbitMQMessengerService(TransportIdentityProvider ident,
 			ConnectionStatus status) {
 		super(ident, status);
         mFormat = new MessageFormat(ident);
         
-        pendingMessages = new HashMap<byte[], String>();
 		exchangeKey = new String(encodeRSAPublicKey(ident.userPublicKey()));
 		queueName = exchangeKey;
 		factory = new ConnectionFactory();
@@ -134,44 +131,9 @@ public class RabbitMQMessengerService extends MessengerService {
 										{
 											if(reply_code != 200)
 												signalConnectionStatus("Message delivery failure: " + Base64.encodeToString(body, false), null);
-											
-											//todo: understand the possible reply_code's and make sure that the message is requeued if appropriate
-											//xxxx: be careful not requeue blindly or you can create an infinite cycle of packets (if they keep failing for the same reason)
-											synchronized (pendingMessages) {
-												pendingMessages.remove(body);
-											}
-											
 										}
 
 									});
-				                	HashMap<byte[], String> pending = new HashMap<byte[], String>();
-				                	synchronized(pendingMessages) {
-					                	pending.putAll(pendingMessages);
-				                	}
-				                	for(byte[] data : pending.keySet()) {
-					                    try {
-											//if there is no connection or we were half shutdown, bail out
-											if(!conn.isOpen() || shutdown) {
-												return;
-											}
-											String to = pending.get(data);
-				                    		outChannel.queueDeclare(to, true, false, false, null);						
-					                        outChannel.basicPublish("", to, true, false, null, data);						                        
-					                    } catch(SocketException e) {
-											signalConnectionStatus("socket error in send pending AMQP", e);
-											return;
-								        } catch (IOException e) {
-											signalConnectionStatus("Failed to send pending message over AMQP connection", e);
-											try {
-												Thread.sleep(30000);
-											} catch (InterruptedException e1) {
-											}
-											break reconnect;
-								        } catch(ShutdownSignalException e) {
-											signalConnectionStatus("Forced shutdown in send pending over AMQP", e);
-											return;
-								        } 
-					                }
 					                for(;;) {
 					                	OutgoingMessage m = null;
 					                    try {
@@ -192,12 +154,10 @@ public class RabbitMQMessengerService extends MessengerService {
 					                    			plain, m.toPublicKeys());
 					                    	for(RSAPublicKey pubKey : m.toPublicKeys()){
 					                    		String dest = encodeRSAPublicKey(pubKey);
+						                    	outChannel.txSelect();
 					                    		outChannel.queueDeclare(dest, true, false, false, null);						
 						                        outChannel.basicPublish("", dest, true, false, null, cyphered);
-						                        synchronized(pendingMessages) {
-						                        	pendingMessages.put(cyphered, dest);
-						                        }
-						                        
+						                    	outChannel.txCommit();
 					                    	}
 					                    } catch(CryptoException e) {
 											signalConnectionStatus("Failed to handle message crypto", e);
