@@ -146,6 +146,9 @@ public class Main {
                             public String contents() {
                                 return line;
                             }
+                            public void onCommitted() {
+                            	/* not needed for test */
+                            }
                         });
 				}
 			}

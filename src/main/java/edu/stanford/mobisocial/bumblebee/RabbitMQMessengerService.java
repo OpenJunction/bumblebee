@@ -152,13 +152,14 @@ public class RabbitMQMessengerService extends MessengerService {
 					                    	String plain = m.contents();
 					                    	byte[] cyphered = mFormat.encodeOutgoingMessage(
 					                    			plain, m.toPublicKeys());
+					                    	outChannel.txSelect();
 					                    	for(RSAPublicKey pubKey : m.toPublicKeys()){
 					                    		String dest = encodeRSAPublicKey(pubKey);
-						                    	outChannel.txSelect();
 					                    		outChannel.queueDeclare(dest, true, false, false, null);						
 						                        outChannel.basicPublish("", dest, true, false, null, cyphered);
-						                    	outChannel.txCommit();
 					                    	}
+					                    	outChannel.txCommit();
+					                    	m.onCommitted();
 					                    } catch(CryptoException e) {
 											signalConnectionStatus("Failed to handle message crypto", e);
 											return;

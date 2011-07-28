@@ -48,7 +48,7 @@ public class XMPPMessengerService extends MessengerService {
                                 msg.setTo(XMPP_SERVER);
                                 msg.addExtension(header);
                                 mConnection.sendPacket(msg);
-
+                                m.onCommitted();
                             } catch (CryptoException e) {
                                 e.printStackTrace(System.err);
                             }
