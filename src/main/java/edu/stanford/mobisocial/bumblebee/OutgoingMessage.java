@@ -9,5 +9,6 @@ public interface OutgoingMessage {
 	public void onEncoded(byte[] encoded);
 	public byte[] getEncoded();
 	public void onCommitted();
+	public long getLocalUniqueId();
 	
 }

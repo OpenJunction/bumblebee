@@ -157,6 +157,9 @@ public class Main {
                             	/* not needed for test */
 								return null;
 							}
+							public long getLocalUniqueId() {
+								return 0;
+							}
                         });
 				}
 			}

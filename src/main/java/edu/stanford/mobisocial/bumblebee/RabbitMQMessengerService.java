@@ -9,7 +9,9 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -39,8 +41,7 @@ public class RabbitMQMessengerService extends MessengerService {
 	Thread inThread;
 	Thread connectThread;
 	
-	private LinkedBlockingQueue<OutgoingMessage> mSendQ = 
-	        new LinkedBlockingQueue<OutgoingMessage>();
+	private TreeMap<Long, OutgoingMessage> mMessages = new TreeMap<Long, OutgoingMessage>();
 	private MessageFormat mFormat = null;
 	
 	static String encodeRSAPublicKey(RSAPublicKey key) {
@@ -138,7 +139,13 @@ public class RabbitMQMessengerService extends MessengerService {
 					                	OutgoingMessage m = null;
 					                    try {
 											try {
-												m = mSendQ.poll(15, TimeUnit.SECONDS);
+												synchronized (mMessages) {
+													while(mMessages.isEmpty()) {
+														mMessages.wait(15000);
+													}
+													m = mMessages.firstEntry().getValue();
+													mMessages.remove(mMessages.firstKey());
+												}
 											} catch (InterruptedException e) {
 											}
 											//if there is no connection or we were half shutdown, bail out
@@ -313,19 +320,14 @@ public class RabbitMQMessengerService extends MessengerService {
  
 	@Override
 	public void sendMessage(OutgoingMessage m) { 
+		//encode it ahead of time, so that future, enqueues won't change the encoded format
 		try {
-			//encode it ahead of time, so that future, enqueues won't change the encoded format
-			//this queue hands off to another thread and as a result
-			//when as message fails to enter the "sent" state, then
-			//it gets continuously requeued each time a new message goes out.  this is the primary
-			//source of the duplicated messages in my tests (because i have many pending)
-			try {
-				mFormat.encodeOutgoingMessage(m);
-				mSendQ.put(m);
-			} catch(CryptoException e) {
-				throw new RuntimeException(e);
+			mFormat.encodeOutgoingMessage(m);
+			synchronized (mMessages) {
+				mMessages.put(m.getLocalUniqueId(), m);
+				mMessages.notify();
 			}
-		} catch(InterruptedException e) {
+		} catch(CryptoException e) {
 			throw new RuntimeException(e);
 		}
 	}
