@@ -149,9 +149,7 @@ public class RabbitMQMessengerService extends MessengerService {
 											}
 											if(m == null)
 												continue;
-					                    	String plain = m.contents();
-					                    	byte[] cyphered = mFormat.encodeOutgoingMessage(
-					                    			plain, m.toPublicKeys());
+					                    	byte[] cyphered = mFormat.encodeOutgoingMessage(m);
 					                    	outChannel.txSelect();
 					                    	for(RSAPublicKey pubKey : m.toPublicKeys()){
 					                    		String dest = encodeRSAPublicKey(pubKey);
@@ -243,19 +241,25 @@ public class RabbitMQMessengerService extends MessengerService {
 							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
 							            	continue;
 					                    }
-							            
-					                    final String contents = mFormat.decodeIncomingMessage(body);
-					                    signalMessageReceived(
-					                        new IncomingMessage() {
-					                            public String from() { return id; }
-					                            public String contents() { return contents; }
-					                            public String toString() { return contents(); }
-					                        });
-							            inChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+					                    try {
+						                    final byte[] signature = mFormat.getMessageSignature(body);
+								            
+						                    final String contents = mFormat.decodeIncomingMessage(body);
+						                    signalMessageReceived(
+						                        new IncomingMessage() {
+						                            public String from() { return id; }
+						                            public String contents() { return contents; }
+						                            public String toString() { return contents(); }
+						                            public byte[] encoded() { return body; }
+						                        });
+								            inChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+					                    } catch(CryptoException e) {
+											signalConnectionStatus("Failed to handle message crypto", e);
+											//a crypto exception will just keep happening, we need to cancel the message
+							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
+					                    }
 							        }
-			                    } catch(CryptoException e) {
-									signalConnectionStatus("Failed to handle message crypto", e);
-									return;
+
 						        } catch(SocketException e) {				        	
 									signalConnectionStatus("socket exception in receive AMQP", e);
 									return;
@@ -306,11 +310,21 @@ public class RabbitMQMessengerService extends MessengerService {
 		// TODO Auto-generated method stub
 
 	}
-
+ 
 	@Override
-	public void sendMessage(OutgoingMessage m) {
+	public void sendMessage(OutgoingMessage m) { 
 		try {
-			mSendQ.put(m);
+			//encode it ahead of time, so that future, enqueues won't change the encoded format
+			//this queue hands off to another thread and as a result
+			//when as message fails to enter the "sent" state, then
+			//it gets continuously requeued each time a new message goes out.  this is the primary
+			//source of the duplicated messages in my tests (because i have many pending)
+			try {
+				mFormat.encodeOutgoingMessage(m);
+				mSendQ.put(m);
+			} catch(CryptoException e) {
+				throw new RuntimeException(e);
+			}
 		} catch(InterruptedException e) {
 			throw new RuntimeException(e);
 		}

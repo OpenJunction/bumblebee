@@ -39,8 +39,7 @@ public class XMPPMessengerService extends MessengerService {
                                         + "@" + XMPP_SERVER;
                                     header.addAddress("to", jid);
                                 }
-                                byte[] cyphered = mFormat.encodeOutgoingMessage(
-                                    plain, m.toPublicKeys());
+                                byte[] cyphered = mFormat.encodeOutgoingMessage(m);
                                 String msgText = Base64.encodeToString(cyphered, false);
                                 Message msg = new Message();
                                 msg.setFrom(mUsername + "@" + XMPP_SERVER);
@@ -205,6 +204,7 @@ public class XMPPMessengerService extends MessengerService {
                         return;
                     }
                     try{
+	                    final byte[] signature = mFormat.getMessageSignature(body);
                         final String contents = mFormat.decodeIncomingMessage(body);
                         int i = jid.indexOf("@");
                         final String from = i > -1 ? jid.substring(0, i) : jid;
@@ -213,6 +213,7 @@ public class XMPPMessengerService extends MessengerService {
                                 public String from() { return from; }
                                 public String contents() { return contents; }
                                 public String toString() { return contents(); }
+                                public byte[] encoded() { return body; }
                             });
                     }
                     catch(CryptoException e){
@@ -253,6 +254,20 @@ public class XMPPMessengerService extends MessengerService {
 
 	@Override
 	public void sendMessage(OutgoingMessage m) {
-		mSendQ.offer(m);
+		try {
+			//encode it ahead of time, so that future, enqueues won't change the encoded format
+			//this queue hands off to another thread and as a result
+			//when as message fails to enter the "sent" state, then
+			//it gets continuously requeued each time a new message goes out.  this is the primary
+			//source of the duplicated messages in my tests (because i have many pending)
+			try {
+				mFormat.encodeOutgoingMessage(m);
+				mSendQ.put(m);
+			} catch(CryptoException e) {
+				throw new RuntimeException(e);
+			}
+		} catch(InterruptedException e) {
+			throw new RuntimeException(e);
+		}
 	}
 }
