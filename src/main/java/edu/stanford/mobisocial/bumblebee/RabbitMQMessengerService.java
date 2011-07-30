@@ -19,6 +19,7 @@ import org.jivesoftware.smack.packet.Message;
 import org.xbill.DNS.CNAMERecord;
 
 import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.ConfirmListener;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.MessageProperties;
@@ -80,8 +81,8 @@ public class RabbitMQMessengerService extends MessengerService {
 		queueName = exchangeKey;
 		factory = new ConnectionFactory();
 	    factory.setHost("pepperjack.stanford.edu");
-	    //may want this higher for battery
-	    factory.setRequestedHeartbeat(30);
+//	    //may want this higher for battery
+//	    factory.setRequestedHeartbeat(30);
 	    connectThread = new Thread(new Runnable() {
 			
 			public void run() {
@@ -102,25 +103,34 @@ public class RabbitMQMessengerService extends MessengerService {
 					//once its opened the rabbitmq library handles reconnect
 			        outThread = new Thread() {
 						public void run() {
-							irun();
-							shutdown = true;
-			        		synchronized(conn) {
-			        			try {
-									conn.close();
-								} catch (Throwable e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
-			        		}
-						}
-						public void irun() {
-					        reconnect: for(;;) {
+			        		final HashMap<Long, OutgoingMessage> pending = new HashMap<Long, OutgoingMessage>();
+							reopen_channel: for(;;) {
 					        	try {
 					        		synchronized(conn) {
 					        			if(!conn.isOpen())
 					        				return;
 					        			outChannel = conn.createChannel();
+					        			//turn on publisher confirmation
+				                    	outChannel.confirmSelect();
 					        		}
+			                    	outChannel.setConfirmListener(new ConfirmListener() {
+										public void handleNack(long deliveryTag, boolean multiple)
+												throws IOException {
+											//resend if it was lost
+											OutgoingMessage m = pending.get(deliveryTag);
+											sendMessage(m);
+											pending.remove(deliveryTag);
+										}
+										
+										public void handleAck(long deliveryTag, boolean multiple)
+												throws IOException {
+											//delivered!
+											OutgoingMessage m = pending.get(deliveryTag);
+											m.onCommitted();
+											pending.remove(deliveryTag);
+											
+										}
+									});
 				                	outChannel.setReturnListener(new ReturnListener() {
 										public void handleReturn(
 												int reply_code, 
@@ -135,87 +145,94 @@ public class RabbitMQMessengerService extends MessengerService {
 										}
 
 									});
-					                for(;;) {
+				                	next_message: for(;;) {
 					                	OutgoingMessage m = null;
-					                    try {
-											try {
-												synchronized (mMessages) {
-													while(mMessages.isEmpty()) {
-														mMessages.wait(15000);
-													}
-													m = mMessages.firstEntry().getValue();
-													mMessages.remove(mMessages.firstKey());
+										try {
+											synchronized (mMessages) {
+												if(mMessages.isEmpty())
+													mMessages.wait(15000);
+												if(!mMessages.isEmpty()) {
+													Long key = mMessages.firstKey();
+													m = mMessages.get(key);
+													mMessages.remove(key);
 												}
-											} catch (InterruptedException e) {
 											}
-											//if there is no connection or we were half shutdown, bail out
-											if(!conn.isOpen() || shutdown) {
-												if(m != null)
-													sendMessage(m);
-												return;
-											}
-											if(m == null)
-												continue;
-					                    	byte[] cyphered = mFormat.encodeOutgoingMessage(m);
-					                    	outChannel.txSelect();
+										} catch (InterruptedException e) {
+										}
+
+										//if there is no connection or we were half shutdown, bail out
+										if(!conn.isOpen() || shutdown) {
+											if(m != null)
+												sendMessage(m);
+											break reopen_channel;
+										}
+										if(m == null)
+											continue next_message;
+														                    	
+										byte[] cyphered;
+										try {
+											cyphered = mFormat.encodeOutgoingMessage(m);
+					                    } catch(CryptoException e) {
+											//TODO: should mark committed?
+
+					                    	//just skip on crypto exception when sending
+											signalConnectionStatus("Failed to handle message crypto", e);
+											continue next_message;
+					                    }
+				                        
+										//at this point, we won't be discarding this message, so pend it
+										long seq = outChannel.getNextPublishSeqNo();
+				                        pending.put(seq, m);
+
+				                        try {
 					                    	for(RSAPublicKey pubKey : m.toPublicKeys()){
+						                        //for now ack each message (will change to route through an exchange
+												seq = outChannel.getNextPublishSeqNo();
+						                        pending.put(seq, m);
+						                        
 					                    		String dest = encodeRSAPublicKey(pubKey);
 					                    		outChannel.queueDeclare(dest, true, false, false, null);						
 						                        outChannel.basicPublish("", dest, true, false, null, cyphered);
 					                    	}
-					                    	outChannel.txCommit();
-					                    	m.onCommitted();
-					                    } catch(CryptoException e) {
-											signalConnectionStatus("Failed to handle message crypto", e);
-											return;
-					                    } catch(SocketException e) {
-											signalConnectionStatus("socket error in send AMQP", e);
-											if(m != null) 
-												sendMessage(m);
-											return;
-								        } catch (IOException e) {
+					                    } catch (IOException e) {
 											signalConnectionStatus("Failed to send message over AMQP connection", e);
-											if(m != null) 
-												sendMessage(m);
-											try {
-												Thread.sleep(30000);
-											} catch (InterruptedException e1) {
-											}
-											break;
+											continue reopen_channel;
 								        } catch(ShutdownSignalException e) {
 											signalConnectionStatus("Forced shutdown in send AMQP", e);
-											if(m != null) 
-												sendMessage(m);
-											return;
+											break reopen_channel;
 								        } 
 					                }
 					        	} catch(IOException e) {
+									continue reopen_channel;
+					        	} catch(ShutdownSignalException e) {
+									break reopen_channel;
+					        	} finally {
+					        		//if we have to rebuild the channel, wait a bit to retry
 									try {
 										Thread.sleep(30000);
 									} catch (InterruptedException e1) {
 									}
-									break;
+					        		//whenever we reopen the channel or potentially reconnect, we must
+					        		//add the messages back to the queue to be sent
+					        		for(OutgoingMessage m : pending.values()) {
+					        			sendMessage(m);
+					        		}		        		
 					        	}
 					        }
+							shutdown = true;
+			        		synchronized(conn) {
+			        			try {
+									conn.close();
+								} catch (Throwable e) {}
+			        		}
 			            }
 			        };	 
 			        outThread.start();
 			        inThread = new Thread(new Runnable() {
 						
 						public void run() {
-							irun();
-							shutdown = true;
-			        		synchronized(conn) {
-			        			try {
-									conn.close();
-								} catch (Throwable e) {
-									e.printStackTrace();
-								}
-			        		}
-						}
-						public void irun() {
 					        boolean autoAck = false;
-					        for(;;) {
+					        reopen_channel: for(;;) {
 						        try {
 					        		synchronized(conn) {
 					        			if(!conn.isOpen())
@@ -225,62 +242,70 @@ public class RabbitMQMessengerService extends MessengerService {
 							        QueueingConsumer consumer = new QueueingConsumer(inChannel);
 									inChannel.queueDeclare(queueName, true, false, false, null);						
 							        inChannel.basicConsume(queueName, autoAck, consumer);
-							        for(;;) {
+							        next_message: for(;;) {
 							            QueueingConsumer.Delivery delivery = null;
 							            try {
 							                delivery = consumer.nextDelivery(15000);
 							            } catch (InterruptedException ie) {
 							            }
 										if(!conn.isOpen() || shutdown)
-											return;
+											break reopen_channel;
 							            if(delivery == null)
-							            	continue;
+							            	continue next_message;
 							            final byte[] body = delivery.getBody();
 							            if(body == null) {
 					                        System.err.println("Could not decode message.");
 							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
-							            	continue;
+							            	continue next_message;
 							            }
 					
 					                    final String id = mFormat.getMessagePersonId(body);
 					                    if (id == null) {
 					                        System.err.println("WTF! person id in message does not match sender!.");
 							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
-							            	continue;
+							            	continue next_message;
 					                    }
+					                    final String contents;
 					                    try {
-						                    final byte[] signature = mFormat.getMessageSignature(body);
-								            
-						                    final String contents = mFormat.decodeIncomingMessage(body);
-						                    signalMessageReceived(
-						                        new IncomingMessage() {
-						                            public String from() { return id; }
-						                            public String contents() { return contents; }
-						                            public String toString() { return contents(); }
-						                            public byte[] encoded() { return body; }
-						                        });
-								            inChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+						                    contents = mFormat.decodeIncomingMessage(body);
 					                    } catch(CryptoException e) {
 											signalConnectionStatus("Failed to handle message crypto", e);
 											//a crypto exception will just keep happening, we need to cancel the message
 							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
+							            	continue next_message;
 					                    }
+					                    signalMessageReceived(
+					                        new IncomingMessage() {
+					                            public String from() { return id; }
+					                            public String contents() { return contents; }
+					                            public String toString() { return contents(); }
+					                            public byte[] encoded() { return body; }
+					                        });
+							            inChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
 							        }
 
-						        } catch(SocketException e) {				        	
-									signalConnectionStatus("socket exception in receive AMQP", e);
-									return;
 						        } catch(IOException e) {
 									signalConnectionStatus("Failed to receive message over AMQP connection", e);
+									continue reopen_channel;
+						        } catch(ShutdownSignalException e) {				        	
+									signalConnectionStatus("Forced shutdown in receive AMQP", e);
+									break reopen_channel;
+					        	} finally {
+					        		//if we have to rebuild the channel, wait a bit to retry
 									try {
 										Thread.sleep(30000);
 									} catch (InterruptedException e1) {
 									}
-						        } catch(ShutdownSignalException e) {				        	
-									signalConnectionStatus("Forced shutdown in receive AMQP", e);
-									return;
-						        }
+					        	}
 					        }
+							shutdown = true;
+			        		synchronized(conn) {
+			        			try {
+									conn.close();
+								} catch (Throwable e) {
+									e.printStackTrace();
+								}
+			        		}
 						}
 					});
 					inThread.start();
