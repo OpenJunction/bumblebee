@@ -81,8 +81,11 @@ public class RabbitMQMessengerService extends MessengerService {
 		queueName = exchangeKey;
 		factory = new ConnectionFactory();
 	    factory.setHost("pepperjack.stanford.edu");
-//	    //may want this higher for battery
-//	    factory.setRequestedHeartbeat(30);
+	    //a heartbeat is still required because the default tcp keep alive is 2hrs
+	    //this means that normal connections get killed only after a very long time
+	    //when changing networks
+	    //may want this higher for battery
+	    factory.setRequestedHeartbeat(30);
 	    connectThread = new Thread(new Runnable() {
 			
 			public void run() {
