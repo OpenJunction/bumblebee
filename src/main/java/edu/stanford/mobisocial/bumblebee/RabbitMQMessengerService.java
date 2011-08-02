@@ -188,17 +188,15 @@ public class RabbitMQMessengerService extends MessengerService {
 				                        pending.put(seq, m);
 
 				                        try {
-											seq = outChannel.getNextPublishSeqNo();
-					                        pending.put(seq, m);
-
-					                        outChannel.exchangeDeclare(queueName + ":out", "fanout");
 					                    	for(RSAPublicKey pubKey : m.toPublicKeys()){
+						                        //for now ack each message (will change to route through an exchange
+												seq = outChannel.getNextPublishSeqNo();
+						                        pending.put(seq, m);
+						                        
 					                    		String dest = encodeRSAPublicKey(pubKey);
-					                    		outChannel.queueDeclare(dest, true, false, false, null);
-					                    		outChannel.queueBind(dest, queueName + ":out", "");
+					                    		outChannel.queueDeclare(dest, true, false, false, null);						
+						                        outChannel.basicPublish("", dest, true, false, null, cyphered);
 					                    	}
-					                        outChannel.basicPublish(queueName + ":out", "", true, false, null, cyphered);
-					                        outChannel.exchangeDelete(queueName + ":out");
 					                    } catch (IOException e) {
 											signalConnectionStatus("Failed to send message over AMQP connection", e);
 											continue reopen_channel;
