@@ -3,8 +3,20 @@ package edu.stanford.mobisocial.bumblebee.util;
 import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
 
 public class Util {
+
+    public static String makePersonIdForPublicKey(PublicKey key) {
+		String me = null;
+		try {
+			me = Util.SHA1(key.getEncoded());
+		} catch (Exception e) {
+			throw new IllegalArgumentException(
+                "Could not compute SHA1 of public key.");
+		}
+		return me.substring(0, 10);
+    }
 
     /**
 	 * Copies a stream.

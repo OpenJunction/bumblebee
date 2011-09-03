@@ -1,11 +1,27 @@
 package edu.stanford.mobisocial.bumblebee;
 
+import java.beans.PropertyEditorManager;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketException;
+import java.security.Key;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.PublicKey;
+import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAKeyGenParameterSpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -15,6 +31,10 @@ import java.util.TreeMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.commons.io.IOUtils;
 import org.jivesoftware.smack.packet.Message;
 import org.xbill.DNS.CNAMERecord;
 
@@ -29,6 +49,7 @@ import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.ShutdownSignalException;
 
 import edu.stanford.mobisocial.bumblebee.util.Base64;
+import edu.stanford.mobisocial.bumblebee.util.Util;
 
 public class RabbitMQMessengerService extends MessengerService {
 
@@ -361,5 +382,144 @@ public class RabbitMQMessengerService extends MessengerService {
 			throw new RuntimeException(e);
 		}
 	}
+	static class FixedIdentityProvider implements TransportIdentityProvider {
+		FixedIdentityProvider(RSAPublicKey pub, RSAPrivateKey priv) {
+			mPub = pub;
+			mPriv = priv;
+		}
+		public RSAPublicKey userPublicKey() {
+			return mPub;
+		}
 
+		public RSAPrivateKey userPrivateKey() {
+			return mPriv;
+		}
+
+		public String userPersonId() {
+			return Util.makePersonIdForPublicKey(mPub);
+		}
+
+		public RSAPublicKey publicKeyForPersonId(String id) {
+			return null;
+		}
+
+		public String personIdForPublicKey(RSAPublicKey key) {
+			return Util.makePersonIdForPublicKey(key);
+		}
+		RSAPublicKey mPub;
+		RSAPrivateKey mPriv;
+	}
+	static class DummyConnectionStatus implements ConnectionStatus {
+		public boolean isConnected() {
+			return true;
+		}
+	}
+
+	static byte[] inputStreamToByteArray(InputStream is) throws IOException {
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+		int nRead;
+		byte[] data = new byte[16384];
+
+		while ((nRead = is.read(data, 0, data.length)) != -1) {
+		  buffer.write(data, 0, nRead);
+		}
+
+		buffer.flush();
+
+		return buffer.toByteArray();
+	}
+	public static void main(String[] args)  
+	{
+		System.out.println(Arrays.toString(args));
+		try {
+			if(args.length == 0) {
+				System.err.println("To listen for messages pass --listen myprivatekey.raw mypublickey.raw");
+				System.err.println("To send a messages pass --from myprivatekey.raw mypublickey.raw destinationkey0.raw ... destinationkeyN.raw");
+				System.err.println("To generate a dummy key pair --generate myprivatekey.raw mypublickey.raw");
+				System.exit(1);
+			}
+			if(args.length < 3) {
+				System.err.println("must specify personal key files");
+				System.exit(1);
+			}
+			if(args[0].equals("--generate")) {
+	            // Generate a 1024-bit Digital Signature Algorithm (RSA) key pair
+	            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+	            keyGen.initialize(1024);
+	            KeyPair kp = keyGen.genKeyPair();        
+	            
+	            new FileOutputStream(args[1]).write(kp.getPrivate().getEncoded());
+	            new FileOutputStream(args[2]).write(kp.getPublic().getEncoded());
+				System.exit(0);
+			}
+			KeyFactory skf = KeyFactory.getInstance("RSA");
+			RSAPrivateKey private_key = (RSAPrivateKey)skf.generatePrivate(new PKCS8EncodedKeySpec(inputStreamToByteArray(new FileInputStream(args[1])))); 
+			RSAPublicKey public_key = (RSAPublicKey)skf.generatePublic(new X509EncodedKeySpec(inputStreamToByteArray(new FileInputStream(args[2])))); 
+	        RabbitMQMessengerService ms = new RabbitMQMessengerService(new FixedIdentityProvider(public_key, private_key), new DummyConnectionStatus());
+	        ms.addConnectionStatusListener(new ConnectionStatusListener() {
+				
+				public void onStatus(String msg, Exception e) {
+					System.err.println("connection status: " + msg);
+					if(e != null)
+						e.printStackTrace(System.err);
+					
+				}
+			});
+			if(args[0].equals("--listen")) {
+				ms.addMessageListener(new MessageListener() {
+					public void onMessage(IncomingMessage m) {
+						System.out.println("message from: " + m.from());
+						System.out.println(m.contents());
+					}
+				});
+			} else if(args[0].equals("--from")) {
+				if(args.length < 4) {
+					System.err.println("must specify some destination");
+					System.exit(1);
+				}
+				final List<RSAPublicKey> to = new LinkedList<RSAPublicKey>();
+				for(int i = 3; i < args.length; ++i) {
+					to.add((RSAPublicKey)skf.generatePublic(new X509EncodedKeySpec(inputStreamToByteArray(new FileInputStream(args[i])))));
+					RSAPublicKey x = (RSAPublicKey)skf.generatePublic(new X509EncodedKeySpec(inputStreamToByteArray(new FileInputStream(args[i]))));
+				}
+				for(;;) {
+					final byte[] message = inputStreamToByteArray(System.in);
+					ms.sendMessage(new OutgoingMessage() {
+						byte[] mEncoded;
+						
+						public List<RSAPublicKey> toPublicKeys() {
+							return to;
+						}
+						
+						public void onEncoded(byte[] encoded) {
+							mEncoded = encoded;
+						}
+						
+						public void onCommitted() {
+							System.err.println("written!");
+							System.exit(0);
+							
+						}
+						
+						public long getLocalUniqueId() {
+							return 0;
+						}
+						
+						public byte[] getEncoded() {
+							return mEncoded;
+						}
+						
+						public String contents() {
+							return new String(message);
+						}
+					});
+				}
+			}
+		} catch(Exception e) {
+			System.err.println("failure encountered");
+			e.printStackTrace(System.err);
+			System.exit(1);
+		}
+	}
 }

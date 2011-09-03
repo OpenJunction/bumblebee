@@ -39,17 +39,6 @@ public class Main {
 		}
 	}
 
-    public static String makePersonIdForPublicKey(PublicKey key){
-		String me = null;
-		try {
-			me = Util.SHA1(key.getEncoded());
-		} catch (Exception e) {
-			throw new IllegalArgumentException(
-                "Could not compute SHA1 of public key.");
-		}
-		return me.substring(0, 10);
-    }
-
 	public static PublicKey loadPublicKey(String filename) {
 		try {
 			File f = new File(filename);
@@ -107,7 +96,7 @@ public class Main {
                     return null;
                 }
                 public String personIdForPublicKey(RSAPublicKey key){
-                    return makePersonIdForPublicKey(key);
+                    return Util.makePersonIdForPublicKey(key);
                 }
             };
         ConnectionStatus status = new ConnectionStatus(){
