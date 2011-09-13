@@ -137,7 +137,7 @@ public class RabbitMQMessengerService extends MessengerService {
 					        			//turn on publisher confirmation
 				                    	outChannel.confirmSelect();
 					        		}
-			                    	outChannel.setConfirmListener(new ConfirmListener() {
+			                    	outChannel.addConfirmListener(new ConfirmListener() {
 										public void handleNack(long deliveryTag, boolean multiple)
 												throws IOException {
 											//resend if it was lost
@@ -155,7 +155,7 @@ public class RabbitMQMessengerService extends MessengerService {
 											
 										}
 									});
-				                	outChannel.setReturnListener(new ReturnListener() {
+				                	outChannel.addReturnListener(new ReturnListener() {
 										public void handleReturn(
 												int reply_code, 
 												String replyText, 
