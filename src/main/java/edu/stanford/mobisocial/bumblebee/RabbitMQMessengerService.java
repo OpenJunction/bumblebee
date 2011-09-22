@@ -218,6 +218,7 @@ public class RabbitMQMessengerService extends MessengerService {
 					                    		outChannel.queueDeclare(dest, true, false, false, null);
 					                    		outChannel.queueBind(dest, queueName + ":out", "");
 					                    	}
+											signalConnectionStatus("Sending " + cyphered.length + " bytes", null);
 					                        outChannel.basicPublish(queueName + ":out", "", true, false, null, cyphered);
 					                        outChannel.exchangeDelete(queueName + ":out");
 					                    } catch (IOException e) {
@@ -300,12 +301,21 @@ public class RabbitMQMessengerService extends MessengerService {
 							            	inChannel.basicReject(delivery.getEnvelope().getDeliveryTag(), false);
 							            	continue next_message;
 					                    }
+			                        	long msghash;
+										try {
+											msghash = mFormat.extractHash(body);
+										} catch (CryptoException e) {
+											msghash = new Random().nextLong();
+										} 
+										final long fmsghash = msghash;
 					                    signalMessageReceived(
 					                        new IncomingMessage() {
 					                            public String from() { return id; }
 					                            public String contents() { return contents; }
 					                            public String toString() { return contents(); }
-					                            public byte[] encoded() { return body; }
+					                            public long hash() {
+					                            	return fmsghash;
+					                            }
 					                        });
 							            inChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
 							        }

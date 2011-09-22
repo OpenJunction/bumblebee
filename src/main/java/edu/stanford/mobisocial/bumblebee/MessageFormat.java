@@ -265,4 +265,18 @@ public class MessageFormat {
 			throw new CryptoException();
 		}
 	}
+
+	public long extractHash(byte[] body) throws CryptoException {
+		ByteArrayInputStreamWithPos bi = new ByteArrayInputStreamWithPos(body);
+		DataInputStream in = new DataInputStream(bi);
+
+		try {
+			short sigLen = in.readShort();
+			long hash;
+			return in.readLong();
+		} catch (Exception e) {
+			e.printStackTrace(System.err);
+			throw new CryptoException();
+		}
+	}
 }

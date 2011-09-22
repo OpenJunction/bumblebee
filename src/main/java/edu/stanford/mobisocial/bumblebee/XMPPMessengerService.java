@@ -214,7 +214,14 @@ public class XMPPMessengerService extends MessengerService {
                                 public String contents() { return contents; }
                                 public String toString() { return contents(); }
                                 public byte[] encoded() { return body; }
-                            });
+	                            public long hash() { 
+	                            	try {
+										return mFormat.extractHash(body);
+									} catch (CryptoException e) {
+										return new Random().nextLong();
+									} 
+	                            }
+                           });
                     }
                     catch(CryptoException e){
                         System.err.println("Failed in processing incoming message! Reason:");

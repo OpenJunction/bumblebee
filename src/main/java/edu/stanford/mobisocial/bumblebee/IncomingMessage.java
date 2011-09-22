@@ -5,5 +5,5 @@ public interface IncomingMessage {
 
 	public String contents();
 
-	public byte[] encoded();
+	public long hash();
 }
