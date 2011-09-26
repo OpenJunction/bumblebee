@@ -382,6 +382,8 @@ public class RabbitMQMessengerService extends MessengerService {
 	@Override
 	public void sendMessage(OutgoingMessage m) { 
 		//encode it ahead of time, so that future, enqueues won't change the encoded format
+		//also, force the sending thread to spend the time to process it and flush
+		//it to the db, otherwise we have to keep too much stuff in memory.
 		try {
 			mFormat.encodeOutgoingMessage(m);
 			synchronized (mMessages) {

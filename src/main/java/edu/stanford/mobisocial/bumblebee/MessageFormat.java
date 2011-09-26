@@ -11,6 +11,8 @@ import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.apache.commons.io.output.NullOutputStream;
+
 public class MessageFormat {
 
 	public static final int AES_Key_Size = 128;
@@ -208,17 +210,20 @@ public class MessageFormat {
 			CipherOutputStream aesOut = new CipherOutputStream(cipherOut,
 					aesCipher);
 			aesOut.write(plain);
+			plain = null;
 			aesOut.close();
-			byte[] cipherData = cipherOut.toByteArray();
-			out.writeInt(cipherData.length);
-			out.write(cipherData);
+			aesOut = null;
+			out.writeInt(cipherOut.size());
+			cipherOut.writeTo(out);
+			cipherOut = null;
 			out.close();
 			bo.close();
 
-			byte[] dataBytes = bo.toByteArray();
-
 			MessageDigest sha1 = MessageDigest.getInstance("SHA1");
-			byte[] digest = sha1.digest(dataBytes);
+			DigestOutputStream dos = new DigestOutputStream(new NullOutputStream(), sha1);
+			bo.writeTo(dos);
+			dos.flush();
+			byte[] digest = sha1.digest();
 			// Encrypt digest
 			Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
 			cipher.init(Cipher.ENCRYPT_MODE, mIdent.userPrivateKey());
@@ -228,10 +233,13 @@ public class MessageFormat {
 			DataOutputStream finalOut = new DataOutputStream(so);
 			finalOut.writeShort(sigBytes.length);
 			finalOut.write(sigBytes);
-			finalOut.write(dataBytes);
+			bo.writeTo(finalOut);
+			bo = null;
 			finalOut.close();
 			
 			encoded = so.toByteArray(); 
+			finalOut = null;
+			so = null;
 			m.onEncoded(encoded);
 			return encoded;
 
