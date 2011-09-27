@@ -245,7 +245,7 @@ public class MessageFormat {
 
 		} catch (Exception e) {
 			e.printStackTrace(System.err);
-			throw new CryptoException();
+			throw new CryptoException(e);
 		}
 	}
 

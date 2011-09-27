@@ -9,4 +9,8 @@ public class CryptoException extends Exception {
 	public CryptoException() {
 		this("");
 	}
+
+	public CryptoException(Exception e) {
+		super(e);
+	}
 }
