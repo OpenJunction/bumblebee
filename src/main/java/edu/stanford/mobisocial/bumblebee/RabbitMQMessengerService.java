@@ -14,6 +14,8 @@ import java.security.Key;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
@@ -137,6 +139,7 @@ public class RabbitMQMessengerService extends MessengerService {
 					        			//turn on publisher confirmation
 				                    	outChannel.confirmSelect();
 					        		}
+					        		final HashMap<List<RSAPublicKey>, String> routes = new HashMap<List<RSAPublicKey>, String>();
 			                    	outChannel.addConfirmListener(new ConfirmListener() {
 										public void handleNack(long deliveryTag, boolean multiple)
 												throws IOException {
@@ -177,7 +180,7 @@ public class RabbitMQMessengerService extends MessengerService {
 													mMessages.wait(15000);
 												if(!mMessages.isEmpty()) {
 													Long key = mMessages.firstKey();
-													m = mMessages.get(key);
+ 													m = mMessages.get(key);
 													mMessages.remove(key);
 												}
 											}
@@ -209,18 +212,29 @@ public class RabbitMQMessengerService extends MessengerService {
 				                        pending.put(seq, m);
 
 				                        try {
-											seq = outChannel.getNextPublishSeqNo();
-					                        pending.put(seq, m);
-
-					                        outChannel.exchangeDeclare(queueName + ":out", "fanout");
-					                    	for(RSAPublicKey pubKey : m.toPublicKeys()){
-					                    		String dest = encodeRSAPublicKey(pubKey);
-					                    		outChannel.queueDeclare(dest, true, false, false, null);
-					                    		outChannel.queueBind(dest, queueName + ":out", "");
-					                    	}
+					                        List<RSAPublicKey> keys = m.toPublicKeys();
+					                        String exchange = routes.get(keys);
+					                        if(exchange == null) {
+					                			MessageDigest sha1;
+												try {
+													sha1 = MessageDigest.getInstance("SHA1");
+												} catch (NoSuchAlgorithmException e) {
+													throw new RuntimeException("Crypto fail!", e);
+												}
+						                    	for(RSAPublicKey pubKey : keys){
+						                    		sha1.update(pubKey.getEncoded());
+						                    	}
+						                    	exchange = Base64.encodeToString(sha1.digest(), false);
+						                        outChannel.exchangeDeclare(exchange, "fanout");
+						                    	for(RSAPublicKey pubKey : keys){
+						                    		String dest = encodeRSAPublicKey(pubKey);
+						                    		outChannel.queueDeclare(dest, true, false, false, null);
+						                    		outChannel.queueBind(dest, exchange, "");
+						                    	}
+						                    	routes.put(keys, exchange);
+					                        }
 											signalConnectionStatus("Sending " + cyphered.length + " bytes", null);
-					                        outChannel.basicPublish(queueName + ":out", "", true, false, null, cyphered);
-					                        outChannel.exchangeDelete(queueName + ":out");
+					                        outChannel.basicPublish(exchange, "", true, false, null, cyphered);
 					                    } catch (IOException e) {
 											signalConnectionStatus("Failed to send message over AMQP connection", e);
 											continue reopen_channel;
@@ -230,10 +244,6 @@ public class RabbitMQMessengerService extends MessengerService {
 								        } 
 					                }
 					        	} catch(IOException e) {
-									continue reopen_channel;
-					        	} catch(ShutdownSignalException e) {
-									break reopen_channel;
-					        	} finally {
 					        		//if we have to rebuild the channel, wait a bit to retry
 									try {
 										Thread.sleep(30000);
@@ -244,6 +254,19 @@ public class RabbitMQMessengerService extends MessengerService {
 					        		for(OutgoingMessage m : pending.values()) {
 					        			sendMessage(m);
 					        		}		        		
+									continue reopen_channel;
+					        	} catch(ShutdownSignalException e) {
+					        		//if we have to rebuild the channel, wait a bit to retry
+									try {
+										Thread.sleep(30000);
+									} catch (InterruptedException e1) {
+									}
+					        		//whenever we reopen the channel or potentially reconnect, we must
+					        		//add the messages back to the queue to be sent
+					        		for(OutgoingMessage m : pending.values()) {
+					        			sendMessage(m);
+					        		}		        		
+									break reopen_channel;
 					        	}
 					        }
 							shutdown = true;
