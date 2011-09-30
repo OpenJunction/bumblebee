@@ -209,41 +209,34 @@ public class RabbitMQMessengerService extends MessengerService {
 				                        
 										//at this point, we won't be discarding this message, so pend it
 										long seq = outChannel.getNextPublishSeqNo();
-				                        pending.put(seq, m);
+					                    pending.put(seq, m);
 
-				                        try {
-					                        List<RSAPublicKey> keys = m.toPublicKeys();
-					                        String exchange = routes.get(keys);
-					                        if(exchange == null) {
-					                			MessageDigest sha1;
-												try {
-													sha1 = MessageDigest.getInstance("SHA1");
-												} catch (NoSuchAlgorithmException e) {
-													throw new RuntimeException("Crypto fail!", e);
-												}
-						                    	for(RSAPublicKey pubKey : keys){
-						                    		sha1.update(pubKey.getEncoded());
-						                    	}
-						                    	exchange = Base64.encodeToString(sha1.digest(), false);
-						                        outChannel.exchangeDeclare(exchange, "fanout");
-						                    	for(RSAPublicKey pubKey : keys){
-						                    		String dest = encodeRSAPublicKey(pubKey);
-						                    		outChannel.queueDeclare(dest, true, false, false, null);
-						                    		outChannel.queueBind(dest, exchange, "");
-						                    	}
-						                    	routes.put(keys, exchange);
-					                        }
-											signalConnectionStatus("Sending " + cyphered.length + " bytes", null);
-					                        outChannel.basicPublish(exchange, "", true, false, null, cyphered);
-					                    } catch (IOException e) {
-											signalConnectionStatus("Failed to send message over AMQP connection", e);
-											continue reopen_channel;
-								        } catch(ShutdownSignalException e) {
-											signalConnectionStatus("Forced shutdown in send AMQP", e);
-											break reopen_channel;
-								        } 
+				                        List<RSAPublicKey> keys = m.toPublicKeys();
+				                        String exchange = routes.get(keys);
+				                        if(exchange == null) {
+				                			MessageDigest sha1;
+											try {
+												sha1 = MessageDigest.getInstance("SHA1");
+											} catch (NoSuchAlgorithmException e) {
+												throw new RuntimeException("Crypto fail!", e);
+											}
+					                    	for(RSAPublicKey pubKey : keys){
+					                    		sha1.update(pubKey.getEncoded());
+					                    	}
+					                    	exchange = Base64.encodeToString(sha1.digest(), false);
+					                        outChannel.exchangeDeclare(exchange, "fanout");
+					                    	for(RSAPublicKey pubKey : keys){
+					                    		String dest = encodeRSAPublicKey(pubKey);
+					                    		outChannel.queueDeclare(dest, true, false, false, null);
+					                    		outChannel.queueBind(dest, exchange, "");
+					                    	}
+					                    	routes.put(keys, exchange);
+				                        }
+										signalConnectionStatus("Sending " + cyphered.length + " bytes", null);
+				                        outChannel.basicPublish(exchange, "", true, false, null, cyphered);
 					                }
 					        	} catch(IOException e) {
+					        		e.printStackTrace(System.err);
 					        		//if we have to rebuild the channel, wait a bit to retry
 									try {
 										Thread.sleep(30000);
@@ -256,6 +249,7 @@ public class RabbitMQMessengerService extends MessengerService {
 					        		}		        		
 									continue reopen_channel;
 					        	} catch(ShutdownSignalException e) {
+					        		e.printStackTrace(System.err);
 					        		//if we have to rebuild the channel, wait a bit to retry
 									try {
 										Thread.sleep(30000);
