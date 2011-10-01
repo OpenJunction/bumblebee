@@ -54,7 +54,7 @@ public class MessageFormat {
 		}
 	}
 
-	private class ByteArrayInputStreamWithPos extends ByteArrayInputStream {
+	private static class ByteArrayInputStreamWithPos extends ByteArrayInputStream {
 		public ByteArrayInputStreamWithPos(byte[] b) {
 			super(b);
 		}
@@ -240,7 +240,7 @@ public class MessageFormat {
 			encoded = so.toByteArray(); 
 			finalOut = null;
 			so = null;
-			m.onEncoded(encoded);
+			m.onEncoded(encoded, extractHash(encoded));
 			return encoded;
 
 		} catch (Exception e) {
@@ -274,7 +274,7 @@ public class MessageFormat {
 		}
 	}
 
-	public long extractHash(byte[] body) throws CryptoException {
+	public static long extractHash(byte[] body) throws CryptoException {
 		ByteArrayInputStreamWithPos bi = new ByteArrayInputStreamWithPos(body);
 		DataInputStream in = new DataInputStream(bi);
 
