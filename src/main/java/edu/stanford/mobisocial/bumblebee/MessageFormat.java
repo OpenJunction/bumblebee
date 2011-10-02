@@ -240,7 +240,7 @@ public class MessageFormat {
 			encoded = so.toByteArray(); 
 			finalOut = null;
 			so = null;
-			m.onEncoded(encoded, extractHash(encoded));
+			m.onEncoded(encoded);
 			return encoded;
 
 		} catch (Exception e) {
@@ -259,7 +259,7 @@ public class MessageFormat {
 		return key.getEncoded();
 	}
 
-	public byte[] getMessageSignature(byte[] body) throws CryptoException {
+	public static byte[] getMessageSignature(byte[] body) throws CryptoException {
 		ByteArrayInputStreamWithPos bi = new ByteArrayInputStreamWithPos(body);
 		DataInputStream in = new DataInputStream(bi);
 

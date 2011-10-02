@@ -138,7 +138,7 @@ public class Main {
                             public void onCommitted() {
                             	/* not needed for test */
                             }
-							public void onEncoded(byte[] encoded, long hash) {
+							public void onEncoded(byte[] encoded) {
                             	/* not needed for test */
 								
 							}
